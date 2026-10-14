@@ -1,5 +1,5 @@
 import { parseLead } from '@/lib/lead-schema';
-import type { LeadStore, StoredLead } from '@/lib/store';
+import { safeErrorLabel, type LeadStore, type StoredLead } from '@/lib/store';
 
 export type LeadResponse = {
   status: number;
@@ -52,7 +52,7 @@ export async function handleLead(
     const hits = await store.hitRate(req.ip);
     if (hits > RATE_LIMIT) return { status: 429, body: { ok: false, message: TOO_MANY } };
   } catch (error) {
-    console.error('lead: rate limit unavailable, failing open', error);
+    console.error('lead: rate limit unavailable, failing open', safeErrorLabel(error));
   }
 
   const unavailable: LeadResponse = { status: 503, body: { ok: false, message: UNAVAILABLE } };
@@ -61,10 +61,10 @@ export async function handleLead(
   try {
     existing = await store.claimPhone(lead.phone, lead.idempotencyKey, CLAIM_TTL_SECONDS);
   } catch (error) {
-    console.error('lead: claim failed', error);
+    console.error('lead: claim failed', lead.idempotencyKey, safeErrorLabel(error));
     return unavailable;
   }
-  if (existing !== null) {
+  if (existing !== null && existing !== lead.idempotencyKey) {
     return { status: 200, body: { ok: true, leadId: existing, duplicate: true } };
   }
 
@@ -79,22 +79,25 @@ export async function handleLead(
     createdAt: new Date(now()).toISOString(),
   };
 
+  let created: boolean;
   try {
-    await store.saveLead(stored);
+    created = await store.saveLead(stored);
   } catch (error) {
-    console.error('lead: save failed', error);
+    console.error('lead: save failed', lead.idempotencyKey, safeErrorLabel(error));
     try {
       await store.releasePhone(lead.phone);
     } catch (releaseError) {
-      console.error('lead: release failed', releaseError);
+      console.error('lead: release failed', lead.idempotencyKey, safeErrorLabel(releaseError));
     }
     return unavailable;
   }
 
-  try {
-    await notify(stored);
-  } catch (error) {
-    console.error('lead: notify failed', error);
+  if (created) {
+    try {
+      await notify(stored);
+    } catch (error) {
+      console.error('lead: notify failed', stored.leadId, safeErrorLabel(error));
+    }
   }
 
   return { status: 200, body: { ok: true, leadId: stored.leadId } };

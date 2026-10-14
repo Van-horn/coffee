@@ -1,5 +1,5 @@
 import { handleLead } from '@/lib/handle-lead';
-import { createUpstashStore, type StoredLead } from '@/lib/store';
+import { createUpstashStore, type LeadStore, type StoredLead } from '@/lib/store';
 
 const MAX_BODY_CHARS = 10_000;
 
@@ -7,6 +7,8 @@ const MAX_BODY_CHARS = 10_000;
 const notifyLead = async (lead: StoredLead): Promise<void> => {
   void lead;
 };
+
+let store: LeadStore | undefined;
 
 function reply(body: unknown, status: number) {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -33,7 +35,7 @@ export async function POST(request: Request) {
 
   const { status, body: result } = await handleLead(
     { body, ip: clientIp(request) },
-    { store: createUpstashStore(), notify: notifyLead, now: Date.now },
+    { store: (store ??= createUpstashStore()), notify: notifyLead, now: Date.now },
   );
   return reply(result, status);
 }

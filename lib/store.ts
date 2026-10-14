@@ -15,13 +15,20 @@ export interface LeadStore {
   /** null when the phone was claimed now, otherwise the leadId that holds the claim. */
   claimPhone(e164: string, leadId: string, ttlSeconds: number): Promise<string | null>;
   releasePhone(e164: string): Promise<void>;
-  /** Idempotent per leadId: a lead is stored and listed at most once. */
-  saveLead(lead: StoredLead): Promise<void>;
+  /** Idempotent per leadId. true when the record was newly created, false when it already existed. */
+  saveLead(lead: StoredLead): Promise<boolean>;
   /** Requests from this ip in the current 600 s window, including this one. */
   hitRate(ip: string): Promise<number>;
 }
 
 const RATE_WINDOW_SECONDS = 600;
+
+/** Error label safe for logs: name plus message cut before Upstash's embedded command payload. */
+export function safeErrorLabel(error: unknown): string {
+  if (!(error instanceof Error)) return 'UnknownError';
+  const cut = error.message.split('command was:')[0].trim();
+  return `${error.name}: ${cut}`.slice(0, 200);
+}
 
 export function createUpstashStore(): LeadStore {
   let redis: Redis | undefined;
@@ -39,7 +46,8 @@ export function createUpstashStore(): LeadStore {
         const retry = await r.set(key, leadId, { nx: true, ex: ttlSeconds });
         if (retry === 'OK') return null;
         const again = await r.get<string>(key);
-        return again === null || again === undefined ? leadId : String(again);
+        if (again === null || again === undefined) throw new Error('claim key expired repeatedly');
+        return String(again);
       }
       return String(existing);
     },
@@ -51,14 +59,16 @@ export function createUpstashStore(): LeadStore {
     async saveLead(lead) {
       const r = client();
       const set = await r.set(`lead:${lead.leadId}`, JSON.stringify(lead), { nx: true });
-      if (set === 'OK') await r.lpush('leads', lead.leadId);
+      if (set !== 'OK') return false;
+      await r.lpush('leads', lead.leadId);
+      return true;
     },
 
     async hitRate(ip) {
       const r = client();
       const key = `rl:${ip}`;
-      const count = await r.incr(key);
-      if (count === 1) await r.expire(key, RATE_WINDOW_SECONDS);
+      // One atomic request: INCR and EXPIRE NX, so the key can never be left without a TTL.
+      const [count] = await r.multi().incr(key).expire(key, RATE_WINDOW_SECONDS, 'NX').exec<[number, number]>();
       return count;
     },
   };
@@ -88,9 +98,10 @@ export function createMemoryStore(now: () => number = Date.now): MemoryStore {
     },
 
     async saveLead(lead) {
-      if (saved.has(lead.leadId)) return;
+      if (saved.has(lead.leadId)) return false;
       saved.set(lead.leadId, lead);
       list.unshift(lead.leadId);
+      return true;
     },
 
     async hitRate(ip) {

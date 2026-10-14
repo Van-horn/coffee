@@ -81,7 +81,7 @@ describe('handleLead', () => {
       req(body({ renderedAt: T0, attribution: { submittedAt: String(T0 + 1000) } })),
       deps,
     );
-    expect(res.status).toBe(200);
+    expect(res).toEqual({ status: 200, body: { ok: true, leadId: 'key-0001' } });
     expect(store.leads()).toHaveLength(0);
     expect(notify).not.toHaveBeenCalled();
   });
@@ -101,7 +101,10 @@ describe('handleLead', () => {
     }
     const sixth = await handleLead(req(body({ idempotencyKey: 'key-six0000' })), deps);
     expect(sixth.status).toBe(429);
-    expect(sixth.body.ok).toBe(false);
+    expect(sixth.body).toEqual({
+      ok: false,
+      message: 'Слишком много попыток. Подождите немного и попробуйте снова.',
+    });
     const other = await handleLead(req(body({ idempotencyKey: 'key-sev0000' }), '2.2.2.2'), deps);
     expect(other.status).toBe(200);
   });
@@ -201,9 +204,82 @@ describe('handleLead', () => {
       handleLead(req(body()), deps),
       handleLead(req(body()), deps),
     ]);
-    expect(a.status).toBe(200);
-    expect(b.status).toBe(200);
+    expect(a).toEqual({ status: 200, body: { ok: true, leadId: 'key-0001' } });
+    // Same key: the loser sees its own claim, saveLead reports "already exists", no second notify.
+    expect(b).toEqual({ status: 200, body: { ok: true, leadId: 'key-0001' } });
     expect(store.leads()).toHaveLength(1);
     expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves and notifies when the claim returned is the request own key', async () => {
+    const { store, notify, deps } = setup();
+    const own: LeadStore = {
+      claimPhone: async (_p, id) => id,
+      releasePhone: (p) => store.releasePhone(p),
+      hitRate: (ip) => store.hitRate(ip),
+      saveLead: (l) => store.saveLead(l),
+    };
+    const res = await handleLead(req(body()), { ...deps, store: own });
+    expect(res).toEqual({ status: 200, body: { ok: true, leadId: 'key-0001' } });
+    expect(store.leads()).toHaveLength(1);
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovers a retry with the same key after save and release both failed', async () => {
+    const { store, notify, deps } = setup();
+    let broken = true;
+    const flaky: LeadStore = {
+      claimPhone: (p, id, ttl) => store.claimPhone(p, id, ttl),
+      releasePhone: async (p) => {
+        if (broken) throw new Error('release down');
+        return store.releasePhone(p);
+      },
+      hitRate: (ip) => store.hitRate(ip),
+      saveLead: async (l) => {
+        if (broken) throw new Error('save down');
+        return store.saveLead(l);
+      },
+    };
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const first = await handleLead(req(body()), { ...deps, store: flaky });
+    expect(first.status).toBe(503);
+    broken = false;
+    const retry = await handleLead(req(body()), { ...deps, store: flaky });
+    expect(retry).toEqual({ status: 200, body: { ok: true, leadId: 'key-0001' } });
+    expect(store.leads()).toHaveLength(1);
+    expect(notify).toHaveBeenCalledTimes(1);
+    err.mockRestore();
+  });
+
+  it('does not notify again when an already stored key is replayed after claim expiry', async () => {
+    const { store, notify, deps, advance } = setup();
+    await handleLead(req(body()), deps);
+    advance(601);
+    const again = await handleLead(req(body()), deps);
+    expect(again).toEqual({ status: 200, body: { ok: true, leadId: 'key-0001' } });
+    expect(store.leads()).toHaveLength(1);
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('never logs personal data from a Redis error message', async () => {
+    const { store, deps } = setup();
+    const leaky: LeadStore = {
+      claimPhone: (p, id, ttl) => store.claimPhone(p, id, ttl),
+      releasePhone: (p) => store.releasePhone(p),
+      hitRate: (ip) => store.hitRate(ip),
+      saveLead: async () => {
+        throw new Error(
+          'ERR boom, command was: ["SET","lead:x","{\\"name\\":\\"Анна\\",\\"phone\\":\\"+375291234567\\"}"]',
+        );
+      },
+    };
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await handleLead(req(body()), { ...deps, store: leaky });
+    expect(res.status).toBe(503);
+    expect(err).toHaveBeenCalled();
+    const logged = JSON.stringify(err.mock.calls);
+    expect(logged).not.toContain('+375291234567');
+    expect(logged).not.toContain('Анна');
+    err.mockRestore();
   });
 });

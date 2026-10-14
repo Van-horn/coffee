@@ -9,6 +9,13 @@ const nextConfig: NextConfig = {
   ...(process.env.NETLIFY === "true" ? {} : { output: "standalone" as const }),
   // Native SQLite addon: loaded with plain require instead of being bundled, and traced into the standalone output.
   serverExternalPackages: ["better-sqlite3"],
+  // The share-image URLs carry a content hash (?<hash>), so link-preview crawlers and the CDN may cache them for a day.
+  async headers() {
+    return ["/opengraph-image", "/twitter-image"].map((source) => ({
+      source,
+      headers: [{ key: "Cache-Control", value: "public, max-age=3600, s-maxage=86400" }],
+    }));
+  },
 };
 
 export default nextConfig;

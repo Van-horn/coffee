@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hoursLabel,
   isOpenNow,
+  isOrderOpen,
   nextDelivery,
   nextRoast,
   orderCutoff,
@@ -68,29 +69,52 @@ describe('nextDelivery', () => {
   });
 });
 
-describe('orderCutoff', () => {
-  it('is Wednesday 20:00 Minsk before the next delivery', () => {
-    expect(orderCutoff(minsk(2026, 10, 13, 10, 0)).toISOString()).toBe(
-      minsk(2026, 10, 14, 20, 0).toISOString(),
-    );
+describe('orderCutoff / isOrderOpen (anchored to nextRoast)', () => {
+  const iso = (d: Date) => d.toISOString();
+  const wed = minsk(2026, 10, 14, 20, 0);
+  it('Mon 10:00 -> Wed 20:00 of that week, open', () => {
+    const now = minsk(2026, 10, 12, 10, 0);
+    expect(iso(orderCutoff(now))).toBe(iso(wed));
+    expect(isOrderOpen(now)).toBe(true);
   });
-  it('Wednesday 19:59 is before the cutoff', () => {
-    const now = minsk(2026, 10, 14, 19, 59);
-    expect(now.getTime()).toBeLessThan(orderCutoff(now).getTime());
+  it('Wed 19:59:59 -> same cutoff, open', () => {
+    const now = minsk(2026, 10, 14, 19, 59, 59);
+    expect(iso(orderCutoff(now))).toBe(iso(wed));
+    expect(isOrderOpen(now)).toBe(true);
   });
-  it('Wednesday 20:00:00 exactly is not before the cutoff', () => {
-    const now = minsk(2026, 10, 14, 20, 0);
-    expect(now.getTime()).not.toBeLessThan(orderCutoff(now).getTime());
+  it('Wed 20:00:00 -> cutoff equals now, closed', () => {
+    expect(iso(orderCutoff(wed))).toBe(iso(wed));
+    expect(isOrderOpen(wed)).toBe(false);
   });
-  it('at Wednesday 20:00 the cutoff is that same instant (derived from this week delivery)', () => {
-    expect(orderCutoff(minsk(2026, 10, 14, 20, 0)).toISOString()).toBe(
-      minsk(2026, 10, 14, 20, 0).toISOString(),
-    );
+  it('Wed 20:01 through Thu 08:59:59 -> past cutoff for the imminent roast, closed', () => {
+    for (const now of [minsk(2026, 10, 14, 20, 1), minsk(2026, 10, 15, 0, 0), minsk(2026, 10, 15, 8, 59, 59)]) {
+      expect(iso(orderCutoff(now))).toBe(iso(wed));
+      expect(orderCutoff(now).getTime()).toBeLessThan(now.getTime());
+      expect(isOrderOpen(now)).toBe(false);
+    }
   });
-  it('Friday after delivery gives next week Wednesday', () => {
-    expect(orderCutoff(minsk(2026, 10, 16, 13, 0)).toISOString()).toBe(
-      minsk(2026, 10, 21, 20, 0).toISOString(),
-    );
+  it('Thu 09:00:00, Thu 10:00, Fri 11:59 -> next Wednesday 20:00, open', () => {
+    const next = minsk(2026, 10, 21, 20, 0);
+    for (const now of [minsk(2026, 10, 15, 9, 0), minsk(2026, 10, 15, 10, 0), minsk(2026, 10, 16, 11, 59)]) {
+      expect(iso(nextRoast(now))).toBe(iso(minsk(2026, 10, 22, 9, 0)));
+      expect(iso(orderCutoff(now))).toBe(iso(next));
+      expect(isOrderOpen(now)).toBe(true);
+    }
+  });
+  it('Sun 23:59 -> Wednesday of the new week, open', () => {
+    const now = minsk(2026, 10, 18, 23, 59);
+    expect(iso(orderCutoff(now))).toBe(iso(minsk(2026, 10, 21, 20, 0)));
+    expect(isOrderOpen(now)).toBe(true);
+  });
+  it('year end: Wed 30 Dec 2026 19:59 open, 20:00 closed, cutoff for Thu 31 Dec', () => {
+    const cut = minsk(2026, 12, 30, 20, 0);
+    expect(iso(orderCutoff(minsk(2026, 12, 30, 19, 59)))).toBe(iso(cut));
+    expect(isOrderOpen(minsk(2026, 12, 30, 19, 59))).toBe(true);
+    expect(iso(orderCutoff(cut))).toBe(iso(cut));
+    expect(isOrderOpen(cut)).toBe(false);
+  });
+  it('Thu 31 Dec 10:00 -> cutoff Wed 6 Jan 2027 20:00', () => {
+    expect(iso(orderCutoff(minsk(2026, 12, 31, 10, 0)))).toBe(iso(minsk(2027, 1, 6, 20, 0)));
   });
 });
 
@@ -115,6 +139,17 @@ describe('isOpenNow', () => {
   it('uses Minsk date: Sun 21:30 UTC is Mon 00:30 Minsk (closed); Mon 05:00 UTC = 08:00 Minsk (open)', () => {
     expect(isOpenNow(new Date(Date.UTC(2026, 9, 18, 21, 30)))).toBe(false);
     expect(isOpenNow(new Date(Date.UTC(2026, 9, 12, 5, 0)))).toBe(true);
+  });
+});
+
+describe('seconds and sharp boundaries', () => {
+  it('nextRoast Thu 08:59:59 is that day; 09:00:01 is next week', () => {
+    expect(nextRoast(minsk(2026, 10, 15, 8, 59, 59)).toISOString()).toBe(minsk(2026, 10, 15, 9, 0).toISOString());
+    expect(nextRoast(minsk(2026, 10, 15, 9, 0, 1)).toISOString()).toBe(minsk(2026, 10, 22, 9, 0).toISOString());
+  });
+  it('hoursLabel Fri 20:00 sharp -> opens 10:00 Saturday; Sun 18:00 sharp -> opens 08:00 Monday', () => {
+    expect(hoursLabel(minsk(2026, 10, 16, 20, 0))).toBe('откроемся в 10:00');
+    expect(hoursLabel(minsk(2026, 10, 18, 18, 0))).toBe('откроемся в 08:00');
   });
 });
 

@@ -1,4 +1,4 @@
-// Business assumptions (cited in the README). All times are Europe/Minsk wall-clock.
+// Business assumptions (to be cited in the README). All times are Europe/Minsk wall-clock.
 // Minsk is UTC+3 all year with no DST, so a fixed offset is used for all arithmetic.
 export const MINSK_UTC_OFFSET_HOURS = 3;
 
@@ -51,11 +51,22 @@ export function nextDelivery(now: Date): Date {
   return nextWeekly(now, DELIVERY_DAY, DELIVERY_HOUR);
 }
 
+/**
+ * Order cutoff paired with nextRoast(now): the Wednesday 20:00 Minsk that
+ * immediately precedes nextRoast(now) (Thursday 09:00 minus 13 hours minus 1 day).
+ * It always refers to the same week as the roast the page shows, so between
+ * Wed 20:00 and Thu 09:00 it is a past instant (cutoff for the imminent roast),
+ * and from Thu 09:00 on it is next Wednesday.
+ */
 export function orderCutoff(now: Date): Date {
-  const delivery = nextDelivery(now);
-  const daysBack = DELIVERY_DAY - CUTOFF_DAY;
-  const deliveryMidnight = minskMidnight(delivery);
-  return new Date(deliveryMidnight - daysBack * DAY_MS + CUTOFF_HOUR * HOUR_MS);
+  const roast = nextRoast(now).getTime();
+  const wedMidnight = minskMidnight(new Date(roast)) - (ROAST_DAY - CUTOFF_DAY) * DAY_MS;
+  return new Date(wedMidnight + CUTOFF_HOUR * HOUR_MS);
+}
+
+/** True while orders for nextRoast(now) are still accepted: now is strictly before orderCutoff(now). */
+export function isOrderOpen(now: Date): boolean {
+  return now.getTime() < orderCutoff(now).getTime();
 }
 
 function hoursFor(dow: number): { open: number; close: number } {

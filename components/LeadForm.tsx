@@ -32,6 +32,13 @@ const IDEM_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const REFRESH_MESSAGE = 'Обновите страницу и попробуйте ещё раз.';
 const HONEYPOT_NAME = 'hp_field_x7';
 
+// Read as a module constant so Next inlines it at build time; empty (or not a valid bot username)
+// hides the whole Telegram confirmation box.
+const BOT_USERNAME = (() => {
+  const raw = (process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? '').trim().replace(/^@/, '');
+  return /^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(raw) ? raw : '';
+})();
+
 // An idempotency key is bound to the content it was first sent with (fingerprint).
 interface KeyRecord {
   key: string;
@@ -179,7 +186,7 @@ export default function LeadForm() {
   const [failMessage, setFailMessage] = useState('');
   const [extraMessages, setExtraMessages] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
-  const [done, setDone] = useState<{ phone: string; telegram: string } | null>(null);
+  const [done, setDone] = useState<{ phone: string; telegram: string; leadId: string } | null>(null);
 
   const inFlight = useRef(false);
   const renderedAt = useRef(0);
@@ -291,7 +298,9 @@ export default function LeadForm() {
       if (result.kind === 'ok') {
         keyRef.current = null;
         storeKey(null);
-        setDone({ phone: formatPhoneMask(values.phone), telegram: payload.telegram });
+        // A duplicate answer names the lead that is actually stored; otherwise it is our own key.
+        const startId = IDEM_RE.test(result.leadId) ? result.leadId : record.key;
+        setDone({ phone: formatPhoneMask(values.phone), telegram: payload.telegram, leadId: startId });
         setErrors({});
         setAttempted(false);
         setStatus('success');
@@ -397,6 +406,35 @@ export default function LeadForm() {
             {HOURS_NOTE}
           </Typography>
         </Box>
+        {BOT_USERNAME ? (
+          <Box
+            data-testid="bot-box"
+            sx={{ bgcolor: colors.paper2, color: colors.ink2, borderRadius: `${radius.md}px`, p: 2, mt: 2 }}
+          >
+            <Typography variant="bodyS" sx={{ fontWeight: 500, m: 0, color: colors.ink }}>
+              Подтверждение в Telegram
+            </Typography>
+            <Typography variant="bodyS" sx={{ color: colors.inkSoft, m: 0 }}>
+              {`Нажмите Start у бота @${BOT_USERNAME}: он пришлёт одно сообщение с деталями заявки. Бот не читает переписку и ничего больше не отправит.`}
+            </Typography>
+          </Box>
+        ) : null}
+        {BOT_USERNAME ? (
+          <Button
+            component="a"
+            variant="contained"
+            fullWidth
+            href={`https://t.me/${BOT_USERNAME}?start=${done.leadId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={{ mt: 2, height: 56, fontSize: 16, fontWeight: 500, '&:focus-visible': focusRing }}
+          >
+            Открыть бота в Telegram
+            <Box component="span" sx={hiddenSx}>
+              {' (откроется в новой вкладке)'}
+            </Box>
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="outlined"
@@ -546,7 +584,7 @@ export default function LeadForm() {
         <Field
           id="lead-telegram"
           label="Ник в Telegram (по желанию)"
-          hint="Если удобнее переписываться: менеджер напишет вам туда"
+          hint="По желанию: менеджер увидит ник в заявке"
           error={errors.telegram}
         >
           <OutlinedInput

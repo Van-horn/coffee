@@ -33,8 +33,6 @@ export default function Header() {
     >
       <Box
         sx={{
-          maxWidth: 1440,
-          mx: 'auto',
           height: '100%',
           px: CONTAINER_PX,
           display: 'grid',

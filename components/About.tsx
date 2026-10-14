@@ -3,7 +3,7 @@ import Typography from '@mui/material/Typography';
 import AccentHeading, { Accent } from './AccentHeading';
 import Eyebrow from './Eyebrow';
 import RoasterPlaceholder from './RoasterPlaceholder';
-import Section from './Section';
+import Section, { wide } from './Section';
 import { colors, radius } from '@/theme/tokens';
 
 // Open item: replace RoasterPlaceholder with a licensed photo at public/images/roastery.jpg (next/image).
@@ -14,7 +14,7 @@ export default function About() {
         sx={{
           display: 'grid',
           gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 520fr) minmax(0, 640fr)' },
-          columnGap: { md: '80px' },
+          columnGap: { md: wide(80, 0.08, 160) },
           rowGap: { xs: '32px', sm: '40px' },
           alignItems: 'center',
         }}
@@ -50,7 +50,7 @@ export default function About() {
             </Typography>
           </Box>
         </Box>
-        <Box>
+        <Box sx={{ maxWidth: { md: wide(640, 0.07, 760) } }}>
           <Eyebrow>05 · о нас</Eyebrow>
           <Box sx={{ mt: '12px' }}>
             <AccentHeading id="about-title" tone="onPaper2">

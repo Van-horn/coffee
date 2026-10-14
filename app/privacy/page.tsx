@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
 import Logo from '@/components/Logo';
+import { CONTAINER_PX } from '@/components/Section';
 import { CONTACT } from '@/lib/contact';
 import { colors } from '@/theme/tokens';
 
@@ -54,7 +55,7 @@ const linkSx = {
 export default function PrivacyPage() {
   return (
     <Box component="main" id="main" tabIndex={-1} sx={{ bgcolor: colors.paper, color: colors.ink, minHeight: '100vh', py: { xs: 3, md: 5 } }}>
-      <Box sx={{ maxWidth: 680, mx: 'auto', px: { xs: 2.5, sm: 5 } }}>
+      <Box sx={{ maxWidth: { xs: 680, md: 720 }, boxSizing: { md: 'content-box' }, mx: { xs: 'auto', md: 0 }, px: { xs: 2.5, sm: 5, md: CONTAINER_PX.md } }}>
         <Logo />
         <Typography variant="h2" component="h1" sx={{ mt: { xs: 5, md: 7 }, mb: 4 }}>
           Политика обработки данных

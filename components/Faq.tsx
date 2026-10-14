@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import AccentHeading, { Accent } from '@/components/AccentHeading';
 import Eyebrow from '@/components/Eyebrow';
-import Section from '@/components/Section';
+import Section, { wide } from '@/components/Section';
 import { colors } from '@/theme/tokens';
 
 const ITEMS = [
@@ -31,7 +31,7 @@ export default function Faq() {
         sx={{
           display: 'grid',
           gridTemplateColumns: { xs: '1fr', md: '4fr 7fr' },
-          columnGap: 8,
+          columnGap: { xs: 8, md: wide(64, 0.06, 128) },
           rowGap: { xs: 4, md: 0 },
           alignItems: 'start',
         }}
@@ -96,7 +96,7 @@ export default function Faq() {
                 aria-labelledby={`faq-q-${i + 1}`}
                 sx={{ pb: 3, pr: { md: 5 } }}
               >
-                <Typography variant="body1" sx={{ color: colors.inkSoft, maxWidth: 640 }}>
+                <Typography variant="body1" sx={{ color: colors.inkSoft, maxWidth: { xs: 640, md: wide(640, 0.07, 760) } }}>
                   {item.a}
                 </Typography>
               </Box>

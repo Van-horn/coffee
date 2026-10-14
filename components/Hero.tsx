@@ -3,7 +3,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import BagIllustration from './BagIllustration';
 import RoastDate from './RoastDate';
-import Section from './Section';
+import Section, { wide } from './Section';
 import { colors } from '@/theme/tokens';
 
 const STATS = [
@@ -26,7 +26,7 @@ export default function Hero() {
           display: 'grid',
           gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 640fr) minmax(0, 469fr)' },
           alignItems: 'center',
-          columnGap: '48px',
+          columnGap: { xs: '48px', md: wide(48, 0.05, 96) },
           rowGap: { xs: '40px', sm: '56px' },
         }}
       >
@@ -59,7 +59,7 @@ export default function Hero() {
           </Typography>
           <Typography
             variant="bodyL"
-            sx={{ mt: { xs: '24px', md: '32px' }, mb: 0, color: colors.inkSoft, maxWidth: 640 }}
+            sx={{ mt: { xs: '24px', md: '32px' }, mb: 0, color: colors.inkSoft, maxWidth: { xs: 640, md: wide(640, 0.07, 720) } }}
           >
             Небольшая обжарка в Минске. Жарим партиями по 5 кг и привозим зерно на 1–3-й день после
             обжарки, пока оно пахнет так, как задумано.
@@ -97,7 +97,7 @@ export default function Hero() {
               mt: { xs: '32px', md: '48px' },
               display: 'grid',
               gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-              columnGap: { xs: '12px', md: '32px' },
+              columnGap: { xs: '12px', md: wide(32, 0.03, 56) },
             }}
           >
             {STATS.map((s) => (

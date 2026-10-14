@@ -3,7 +3,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import AccentHeading, { Accent } from './AccentHeading';
 import Eyebrow from './Eyebrow';
-import Section from './Section';
+import Section, { wide } from './Section';
 import CheckIcon from './icons/CheckIcon';
 import { SUBSCRIPTION } from '@/lib/catalog';
 import { colors, radius } from '@/theme/tokens';
@@ -28,8 +28,8 @@ export default function Subscription() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 420px)' },
-          columnGap: { md: '64px' },
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: `minmax(0, 1fr) minmax(0, ${wide(420, 0.3, 640)})` },
+          columnGap: { md: wide(64, 0.06, 128) },
           rowGap: { xs: '32px', sm: '40px' },
           alignItems: { xs: 'stretch', md: 'center' },
           // Tablet design (768) puts the card beside the text; 640-767 stays stacked.
@@ -40,7 +40,7 @@ export default function Subscription() {
           },
         }}
       >
-        <Box sx={{ maxWidth: { md: 640 } }}>
+        <Box sx={{ maxWidth: { md: wide(640, 0.07, 760) } }}>
           <Eyebrow>03 · подписка</Eyebrow>
           <Box sx={{ mt: '12px' }}>
             <AccentHeading id="subscription-title" tone="onPaper2">

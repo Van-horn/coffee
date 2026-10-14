@@ -3,7 +3,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import AccentHeading, { Accent } from './AccentHeading';
 import Eyebrow from './Eyebrow';
-import Section from './Section';
+import Section, { wide } from './Section';
 import CoffeeBeanIcon from './icons/CoffeeBeanIcon';
 import DripBagIcon from './icons/DripBagIcon';
 import { COFFEES, DRIP_BAGS, type Coffee } from '@/lib/catalog';
@@ -196,8 +196,8 @@ export default function Range() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 480px)' },
-          columnGap: '48px',
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: `minmax(0, 1fr) minmax(0, ${wide(480, 0.2, 640)})` },
+          columnGap: { xs: '48px', md: wide(48, 0.05, 96) },
           rowGap: '16px',
           alignItems: 'end',
         }}
@@ -223,7 +223,7 @@ export default function Range() {
           listStyle: 'none',
           display: 'grid',
           gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))' },
-          gap: { xs: '24px', sm: '24px', md: '24px' },
+          gap: { xs: '24px', sm: '24px', md: wide(24, 0.02, 40) },
         }}
       >
         {COFFEES.map((coffee) => (

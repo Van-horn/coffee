@@ -7,7 +7,7 @@ import FlameIcon from './icons/FlameIcon';
 import PinIcon from './icons/PinIcon';
 import TruckIcon from './icons/TruckIcon';
 import NextRoast from './NextRoast';
-import Section from './Section';
+import Section, { wide } from './Section';
 import { CONTACT } from '@/lib/contact';
 import { colors, radius } from '@/theme/tokens';
 
@@ -80,6 +80,7 @@ function DayTile({ day }: { day: Day }) {
         boxSizing: 'border-box',
         minHeight: 64,
         [LABELS_FROM]: { minHeight: 92 },
+        '@media (min-width:1441px)': { minHeight: wide(92, 0.04, 120) },
         px: { xs: 0, sm: '4px', md: '8px' },
         overflow: 'hidden',
         py: { xs: '12px', sm: '10px' },
@@ -160,7 +161,7 @@ export default function Week() {
         sx={{
           display: 'grid',
           gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 3fr) minmax(0, 2fr)' },
-          columnGap: '80px',
+          columnGap: { xs: '80px', md: wide(80, 0.08, 160) },
           rowGap: { xs: '16px', md: 0 },
           alignItems: 'start',
         }}
@@ -173,7 +174,7 @@ export default function Week() {
         </Box>
         <Typography
           variant="bodyL"
-          sx={{ color: colors.paperDim, m: 0, pt: { md: '28px' } }}
+          sx={{ color: colors.paperDim, m: 0, pt: { md: '28px' }, maxWidth: { md: wide(640, 0.07, 760) } }}
         >
           Через месяц после обжарки аромат кофе тускнеет. Поэтому мы жарим раз в неделю, по четвергам, и развозим
           сразу. К вам зерно приходит на{' '}
@@ -208,7 +209,7 @@ export default function Week() {
           mt: { xs: '32px', md: '48px' },
           display: 'grid',
           gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(3, minmax(0, 1fr))' },
-          columnGap: { sm: '24px', md: '48px' },
+          columnGap: { sm: '24px', md: wide(48, 0.05, 96) },
           rowGap: '20px',
         }}
       >

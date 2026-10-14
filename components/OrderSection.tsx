@@ -3,7 +3,7 @@ import Typography from '@mui/material/Typography';
 import AccentHeading, { Accent } from '@/components/AccentHeading';
 import Eyebrow from '@/components/Eyebrow';
 import LeadForm from '@/components/LeadForm';
-import Section from '@/components/Section';
+import Section, { wide } from '@/components/Section';
 import CheckIcon from '@/components/icons/CheckIcon';
 import { colors, radius } from '@/theme/tokens';
 
@@ -26,7 +26,7 @@ export default function OrderSection() {
         sx={{
           display: 'grid',
           gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 8fr) minmax(0, 11fr)' },
-          columnGap: { md: 6, lg: 10 },
+          columnGap: { md: 6, lg: 10, xl: wide(80, 0.08, 160) },
           rowGap: { xs: 5, sm: 6 },
           alignItems: 'start',
         }}
@@ -38,7 +38,7 @@ export default function OrderSection() {
               Оставьте заявку, <Accent>мы перезвоним</Accent>
             </AccentHeading>
           </Box>
-          <Typography variant="bodyL" sx={{ color: colors.paperDim, mt: 3, mb: 0 }}>
+          <Typography variant="bodyL" sx={{ color: colors.paperDim, mt: 3, mb: 0, maxWidth: { md: wide(640, 0.07, 760) } }}>
             Укажите телефон. Менеджер перезвонит в рабочее время и всё оформит: подписку или разовый заказ.
           </Typography>
 
@@ -101,7 +101,9 @@ export default function OrderSection() {
           </Box>
         </Box>
 
-        <LeadForm />
+        <Box sx={{ minWidth: 0, width: '100%', maxWidth: { md: 680 }, justifySelf: { md: 'end' } }}>
+          <LeadForm />
+        </Box>
       </Box>
     </Section>
   );

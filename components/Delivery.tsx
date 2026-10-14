@@ -6,7 +6,7 @@ import AccentHeading, { Accent } from './AccentHeading';
 import Eyebrow from './Eyebrow';
 import MapTile from './MapTile';
 import OpenNow, { TodayChip } from './OpenNow';
-import Section from './Section';
+import Section, { wide } from './Section';
 import TruckIcon from './icons/TruckIcon';
 import { FREE_DELIVERY_FROM_BYN } from '@/lib/catalog';
 import { CONTACT } from '@/lib/contact';
@@ -41,7 +41,7 @@ export default function Delivery() {
           mt: { xs: '32px', md: '48px' },
           display: 'grid',
           gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' },
-          gap: { xs: '20px', md: '24px' },
+          gap: { xs: '20px', md: wide(24, 0.03, 48) },
           alignItems: 'stretch',
         }}
       >

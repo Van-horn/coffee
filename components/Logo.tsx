@@ -11,7 +11,7 @@ export default function Logo({ tone = 'onLight' }: LogoProps) {
     <Box
       component="a"
       href="/"
-      aria-label="Кварта, на главную"
+      aria-label="Кварта обжарка · Минск, на главную"
       sx={{
         display: 'inline-flex',
         alignItems: 'center',

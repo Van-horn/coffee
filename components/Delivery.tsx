@@ -69,7 +69,7 @@ export default function Delivery() {
           <Typography variant="h3" component="h3" sx={{ m: 0 }}>
             По пятницам
           </Typography>
-          <Typography variant="body1" sx={{ m: 0, color: colors.inkSoft }}>
+          <Typography variant="body1" sx={{ m: 0, color: colors.inkSoft, maxWidth: 560 }}>
             В четверг обжариваем, в пятницу развозим. Вы получаете свежее зерно на следующий день.
           </Typography>
           <Box sx={{ bgcolor: colors.paper2, borderRadius: `${radius.lg}px`, p: '16px' }}>

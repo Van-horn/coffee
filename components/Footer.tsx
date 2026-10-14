@@ -6,6 +6,15 @@ import Section, { HEADER_HEIGHT } from '@/components/Section';
 import { CONTACT } from '@/lib/contact';
 import { colors } from '@/theme/tokens';
 
+const srOnly = {
+  position: 'absolute',
+  width: '1px',
+  height: '1px',
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+} as const;
+
 const linkSx = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -82,8 +91,18 @@ export default function Footer() {
                 </Box>
               </li>
               <li>
-                <Box component="a" href={CONTACT.telegramUrl} sx={linkSx}>
-                  Telegram {CONTACT.telegramHandle}
+                <Box
+                  component="a"
+                  href={CONTACT.telegramChannelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={linkSx}
+                >
+                  Telegram-канал с заявками
+                  <Box component="span" sx={srOnly}>
+                    {' '}
+                    (откроется в новой вкладке)
+                  </Box>
                 </Box>
               </li>
               <li>

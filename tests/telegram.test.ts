@@ -448,7 +448,9 @@ describe("sendTelegramMessage", () => {
 
   it("posts to the given chat id and text", async () => {
     vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
-    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     await sendTelegramMessage(42, "hi");
     const [url, init] = fetchMock.mock.calls[0];
@@ -465,7 +467,9 @@ describe("sendTelegramMessage", () => {
     "sends the channel id %s unchanged as chat_id",
     async (channel) => {
       vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
-      const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response("{}", { status: 200 }));
       vi.stubGlobal("fetch", fetchMock);
       await sendTelegramMessage(channel, "hi");
       expect(JSON.parse(fetchMock.mock.calls[0][1].body).chat_id).toBe(channel);
@@ -477,7 +481,9 @@ describe("sendTelegramMessage", () => {
     async (channel) => {
       vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
       vi.stubEnv("TELEGRAM_CHAT_ID", channel);
-      const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response("{}", { status: 200 }));
       vi.stubGlobal("fetch", fetchMock);
       await sendTelegram(lead());
       const body = JSON.parse(fetchMock.mock.calls[0][1].body);
@@ -489,14 +495,23 @@ describe("sendTelegramMessage", () => {
   it("throws a token-free error when the token is missing", async () => {
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
     vi.stubGlobal("fetch", vi.fn());
-    await expect(sendTelegramMessage(42, "hi")).rejects.toThrow("telegram send failed");
+    await expect(sendTelegramMessage(42, "hi")).rejects.toThrow(
+      "telegram send failed",
+    );
   });
 
   it("never leaks the token, chat id or text in the error", async () => {
     vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 400 })));
-    const error = await sendTelegramMessage(987654321, "secret text").catch((e) => e as Error);
-    expect(inspect(error, { showHidden: true })).not.toMatch(/SECRET-token|987654321|secret text/);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("{}", { status: 400 })),
+    );
+    const error = await sendTelegramMessage(987654321, "secret text").catch(
+      (e) => e as Error,
+    );
+    expect(inspect(error, { showHidden: true })).not.toMatch(
+      /SECRET-token|987654321|secret text/,
+    );
   });
 });
 
@@ -641,7 +656,14 @@ describe("sendTelegram targets", () => {
     await expect(sendTelegram(lead(), sleep)).resolves.toBeUndefined();
     const log = dump();
     expect(log).toContain("channel");
-    for (const secret of [TOKEN, "api.telegram.org", CHANNEL, PRIVATE, "Анна", "+375291234567"])
+    for (const secret of [
+      TOKEN,
+      "api.telegram.org",
+      CHANNEL,
+      PRIVATE,
+      "Анна",
+      "+375291234567",
+    ])
       expect(log).not.toContain(secret);
   });
 
@@ -652,7 +674,9 @@ describe("sendTelegram targets", () => {
     const err = await failure(sendTelegram(lead(), sleep));
     expect(err?.message).toBe("telegram send failed: 400 Bad Request");
     for (const secret of [TOKEN, CHANNEL, PRIVATE, "Анна"])
-      expect(inspect(err, { showHidden: true, depth: 10 })).not.toContain(secret);
+      expect(inspect(err, { showHidden: true, depth: 10 })).not.toContain(
+        secret,
+      );
   });
 
   it("rejects when only the channel is configured and it fails", async () => {
@@ -674,19 +698,25 @@ describe("sendTelegram targets", () => {
   });
 
   it("stays within the total deadline when both targets hang", async () => {
+    // Both targets run in parallel, so a hanging attempt wave advances the shared clock by one
+    // timeout, not by the sum of both.
     let clock = 0;
+    let waveStart = 0;
+    let waveEnd = 0;
     const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
     fetchMock.mockImplementation(async () => {
-      const start = clock;
       const t = timeoutSpy.mock.calls.at(-1)![0] as number;
-      clock = Math.max(clock, start + t);
+      await Promise.resolve(); // let the other target start before the clock moves
+      clock = Math.max(clock, waveStart + t);
+      waveEnd = clock;
       throw new DOMException("timed out", "TimeoutError");
     });
     const err = await failure(
       sendTelegram(
         lead(),
         async (ms) => {
-          clock += ms;
+          clock = waveEnd + ms;
+          waveStart = clock;
         },
         () => clock,
       ),

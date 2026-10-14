@@ -4,7 +4,6 @@ node_modules
 !.env.example
 .vercel
 .cursor
-2026-*-command-message*.txt
 
 # typescript
 *.tsbuildinfo

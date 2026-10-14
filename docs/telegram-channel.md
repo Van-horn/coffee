@@ -18,7 +18,7 @@ The channel's invite link (`https://t.me/+<code>`) is shown on the site (footer 
 Время: 15.10.2026 01:30 (Минск)
 ```
 
-All personal details go only to the private chat (`TELEGRAM_CHAT_ID`). Never point `TELEGRAM_CHAT_ID` at the public channel.
+All personal details go only to the private chat (`TELEGRAM_CHAT_ID`). Never point `TELEGRAM_CHAT_ID` at the public channel. As a safety net, if the two ids are equal (after trimming; `@names` case-insensitively), the code sends only the anonymized post to that id, logs one fixed warning without the id, and treats the channel as the only target.
 
 ## 1. Create the bot (BotFather)
 
@@ -56,7 +56,7 @@ Option B, a private group with the bot: create a group, add the bot and the mana
 | `TELEGRAM_CHAT_ID` | private manager chat id (positive number, or negative for a private group) |
 | `TELEGRAM_CHANNEL_ID` | public channel id, starts with `-100` |
 
-Set them in Vercel (Project -> Settings -> Environment Variables, Production) and in `.env.local` for local runs, then redeploy. The site works without any of them: leads are still saved, and notifications are skipped with one warning in the logs. If only the token and `TELEGRAM_CHANNEL_ID` are set, the channel post is sent and the logs carry one warning that order details are not delivered to a private chat.
+Set them in Vercel (Project -> Settings -> Environment Variables, Production) and in `.env.local` for local runs, then redeploy. The site works without any of them: leads are still saved, and notifications are skipped with one warning in the logs. **If `TELEGRAM_CHAT_ID` is not set, order details are NOT delivered anywhere except the stored data (the file database): nobody is notified of the customer's name and phone.** The privacy page statement that the order goes to a closed manager chat is only true once `TELEGRAM_CHAT_ID` is configured. If only the token and `TELEGRAM_CHANNEL_ID` are set, the channel post is sent and the logs carry one warning that order details are not delivered to a private chat.
 
 Delivery rules: both messages are sent in parallel within one 4-second budget. If the private message fails, the request fails and the lead can be retried (the channel may then get a duplicate anonymized post). If only the channel post fails, it is logged and ignored. If the channel is the only target and fails, the request fails.
 
@@ -88,7 +88,8 @@ Expect `"ok":true` and the message in the right place. Then submit the form on t
 | `403 Forbidden` for the private chat | The manager never pressed Start, or blocked the bot. Ask them to open the bot and press Start. |
 | `400 Bad Request: chat not found` | Wrong id. The channel id must start with `-100`; the invite link is not an id. For a direct chat the manager must have pressed Start. |
 | `401 Unauthorized` | Wrong or revoked token. Check `TELEGRAM_BOT_TOKEN`; regenerate with BotFather `/revoke` if needed. |
-| Channel post arrives, no manager message | `TELEGRAM_CHAT_ID` is not set (see the one-time warning in the logs). |
+| Channel post arrives, no manager message | `TELEGRAM_CHAT_ID` is not set (see the one-time warning in the logs). Order details then exist only in the stored data, not in any chat, and the privacy page claim about the closed chat is not yet true. |
+| Warning "TELEGRAM_CHAT_ID equals TELEGRAM_CHANNEL_ID" | Both variables hold the same id. Only the anonymized post is sent; set `TELEGRAM_CHAT_ID` to the private manager chat. |
 | Nothing arrives, no error | Variables not set in the deployed environment, or not redeployed after setting them. |
 
 Delivery failures are logged without the token, chat ids or customer data (for example `telegram send failed: 403 Forbidden`).

@@ -1,12 +1,10 @@
 import { handleLead } from '@/lib/handle-lead';
-import { createUpstashStore, type LeadStore, type StoredLead } from '@/lib/store';
+import { createUpstashStore, type LeadStore } from '@/lib/store';
+import { sendTelegram } from '@/lib/telegram';
 
 const MAX_BODY_CHARS = 10_000;
 
-// Task 6 replaces this no-op with the Telegram notifier.
-const notifyLead = async (lead: StoredLead): Promise<void> => {
-  void lead;
-};
+const notifyLead = sendTelegram;
 
 let store: LeadStore | undefined;
 

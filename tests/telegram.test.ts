@@ -1,0 +1,241 @@
+import { inspect } from 'node:util';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { StoredLead } from '@/lib/store';
+import { formatLeadMessage, formatMinskTime, sendTelegram } from '@/lib/telegram';
+
+const TOKEN = '123456:SECRET-token_abc';
+const CHAT = '-1001234567890';
+
+const lead = (over: Partial<StoredLead> = {}): StoredLead => ({
+  leadId: 'lead-1',
+  name: 'Анна Секретова',
+  phone: '+375291234567',
+  telegram: '',
+  interest: 'subscription',
+  comment: 'Хочу зерно',
+  attribution: {},
+  createdAt: '2026-10-14T22:30:00.000Z',
+  ...over,
+});
+
+describe('formatMinskTime', () => {
+  it('shifts to Minsk across the date boundary', () => {
+    expect(formatMinskTime('2026-10-14T22:30:00.000Z')).toBe('15.10.2026 01:30');
+  });
+  it('rolls over the year', () => {
+    expect(formatMinskTime('2026-12-31T21:30:00.000Z')).toBe('01.01.2027 00:30');
+  });
+  it('keeps same-day times', () => {
+    expect(formatMinskTime('2026-03-05T06:07:00.000Z')).toBe('05.03.2026 09:07');
+  });
+});
+
+describe('formatLeadMessage', () => {
+  it('escapes html in name and comment', () => {
+    const msg = formatLeadMessage(lead({ name: '<b>x</b> & "q" \'s\'', comment: '<i>c</i>' }));
+    expect(msg).toContain('&lt;b&gt;x&lt;/b&gt; &amp; &quot;q&quot; &#39;s&#39;');
+    expect(msg).toContain('&lt;i&gt;c&lt;/i&gt;');
+    expect(msg.replace('<b>Новая заявка</b>', '')).not.toContain('<b>x');
+  });
+
+  it('includes phone, id, time and interest labels', () => {
+    const msg = formatLeadMessage(lead());
+    expect(msg).toContain('<b>Новая заявка</b> · подписка');
+    expect(msg).toContain('Телефон: +375291234567');
+    expect(msg).toContain('Заявка получена: 15.10.2026 01:30 · id lead-1');
+    expect(formatLeadMessage(lead({ interest: 'order' }))).toContain('разовый заказ');
+    expect(formatLeadMessage(lead({ interest: 'question' }))).toContain('вопрос');
+  });
+
+  it('includes attribution', () => {
+    const msg = formatLeadMessage(
+      lead({
+        attribution: {
+          utm_source: 'yandex',
+          utm_medium: 'cpc',
+          utm_campaign: 'camp1',
+          yclid: 'Y123',
+          landing: '/?a=1',
+          referrer: 'https://ya.ru/',
+        },
+      }),
+    );
+    expect(msg).toContain('Источник: yandex / cpc');
+    expect(msg).toContain('Кампания: camp1');
+    expect(msg).toContain('yclid=Y123');
+    expect(msg).toContain('Страница входа: /?a=1');
+    expect(msg).toContain('Пришёл с: https://ya.ru/');
+  });
+
+  it('renders the customer nick as a link only when present', () => {
+    expect(formatLeadMessage(lead({ telegram: 'anna_minsk' }))).toContain(
+      'Telegram клиента: <a href="https://t.me/anna_minsk">@anna_minsk</a>',
+    );
+    expect(formatLeadMessage(lead())).not.toContain('Telegram клиента');
+  });
+
+  it('omits empty values and never prints undefined/null', () => {
+    const msg = formatLeadMessage(lead({ comment: '', attribution: { referrer: '' } }));
+    expect(msg).not.toMatch(/undefined|null/);
+    expect(msg).not.toContain('Комментарий');
+    expect(msg).not.toContain('Пришёл с');
+    expect(msg).not.toContain('Источник');
+    for (const line of msg.split('\n')) expect(line).not.toMatch(/:\s*$/);
+  });
+
+  it('stays within the cap with no broken entities or tags in the worst case', () => {
+    const keys = [
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+      'yclid', 'ysclid', 'fbclid', 'landing', 'referrer', 'submittedAt',
+    ];
+    const attribution = Object.fromEntries(keys.map((k) => [k, '&'.repeat(300)]));
+    const msg = formatLeadMessage(
+      lead({ comment: '<'.repeat(500), name: '&'.repeat(100), telegram: 'a'.repeat(32), attribution }),
+    );
+    expect(msg.length).toBeLessThanOrEqual(3800);
+    expect(msg).not.toMatch(/&(?!(amp|lt|gt|quot|#39);)/);
+    expect(msg.match(/<b>/g)?.length).toBe(msg.match(/<\/b>/g)?.length);
+    expect(msg.match(/<a /g)?.length).toBe(msg.match(/<\/a>/g)?.length);
+    expect(msg.replace(/<\/?b>|<a href="[^"]*">|<\/a>/g, '')).not.toMatch(/[<>]/);
+    expect(msg).toContain('id lead-1');
+  });
+});
+
+describe('sendTelegram', () => {
+  const sleep = vi.fn(async (ms: number) => {
+    void ms;
+  });
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let spies: ReturnType<typeof vi.spyOn>[];
+  const ok = () => new Response(JSON.stringify({ ok: true }), { status: 200 });
+  const fail = (status: number, body: unknown = { ok: false, description: 'boom' }) =>
+    new Response(JSON.stringify(body), { status });
+  const consoleDump = () =>
+    spies.map((s) => inspect(s.mock.calls, { showHidden: true, depth: 10 })).join('\n');
+  const full = lead({ telegram: 'anna_minsk' });
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv('TELEGRAM_BOT_TOKEN', TOKEN);
+    vi.stubEnv('TELEGRAM_CHAT_ID', CHAT);
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    sleep.mockClear();
+    spies = (['log', 'warn', 'error', 'info', 'debug'] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    );
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const assertSafe = (err: unknown) => {
+    const e = err as Error;
+    const blob = `${e.message}\n${e.stack}\n${consoleDump()}`;
+    for (const secret of [TOKEN, 'api.telegram.org', '+375291234567', 'Анна', 'Хочу зерно', 'SECRET'])
+      expect(blob).not.toContain(secret);
+  };
+  const failure = (p: Promise<void>) =>
+    p.then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+
+  it('posts the exact request', async () => {
+    fetchMock.mockResolvedValue(ok());
+    await sendTelegram(full, sleep);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`https://api.telegram.org/bot${TOKEN}/sendMessage`);
+    expect(init.method).toBe('POST');
+    expect(init.headers['content-type']).toBe('application/json');
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(JSON.parse(init.body)).toEqual({
+      chat_id: CHAT,
+      text: formatLeadMessage(full),
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    });
+  });
+
+  it('is a no-op with a single warning when not configured', async () => {
+    vi.stubEnv('TELEGRAM_BOT_TOKEN', '');
+    const mod = await import('@/lib/telegram');
+    await mod.sendTelegram(full, sleep);
+    await mod.sendTelegram(full, sleep);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const warn = console.warn as unknown as ReturnType<typeof vi.fn>;
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      'telegram notifications disabled: bot token or chat id not configured',
+    );
+    expect(consoleDump()).not.toContain(CHAT);
+  });
+
+  it('retries once after a 500', async () => {
+    fetchMock.mockResolvedValueOnce(fail(500)).mockResolvedValueOnce(ok());
+    await expect(sendTelegram(full, sleep)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(400);
+  });
+
+  it('throws a safe error after two failures', async () => {
+    fetchMock.mockImplementation(async () => fail(502, { ok: false, description: 'Bad Gateway' }));
+    const err = await failure(sendTelegram(full, sleep));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(err?.message).toContain('502');
+    expect(err?.message).toContain('Bad Gateway');
+    assertSafe(err);
+  });
+
+  it('does not retry a 400', async () => {
+    fetchMock.mockImplementation(async () =>
+      fail(400, { ok: false, description: 'chat not found' }),
+    );
+    const err = await failure(sendTelegram(full, sleep));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(err?.message).toContain('400');
+    assertSafe(err);
+  });
+
+  it('retries a 429 with retry_after 1', async () => {
+    fetchMock
+      .mockResolvedValueOnce(fail(429, { ok: false, parameters: { retry_after: 1 } }))
+      .mockResolvedValueOnce(ok());
+    await sendTelegram(full, sleep);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(1000);
+  });
+
+  it('does not retry a 429 with retry_after 30', async () => {
+    fetchMock.mockImplementation(async () =>
+      fail(429, { ok: false, parameters: { retry_after: 30 } }),
+    );
+    const err = await failure(sendTelegram(full, sleep));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(err?.message).toContain('429');
+    assertSafe(err);
+  });
+
+  it('never leaks the token from fetch errors', async () => {
+    fetchMock.mockImplementation(async () => {
+      const e = new TypeError(`fetch failed for https://api.telegram.org/bot${TOKEN}/sendMessage`);
+      (e as { cause?: unknown }).cause = new Error(TOKEN);
+      throw e;
+    });
+    const err = await failure(sendTelegram(full, sleep));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(err?.message).toContain('TypeError');
+    assertSafe(err);
+  });
+
+  it('caps a long description', async () => {
+    fetchMock.mockImplementation(async () =>
+      fail(400, { ok: false, description: 'x'.repeat(500) }),
+    );
+    const err = await failure(sendTelegram(full, sleep));
+    expect(err!.message.length).toBeLessThan(200);
+  });
+});

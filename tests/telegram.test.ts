@@ -5,6 +5,7 @@ import {
   formatLeadMessage,
   formatMinskTime,
   sendTelegram,
+  sendTelegramMessage,
 } from "@/lib/telegram";
 
 const TOKEN = "123456:SECRET-token_abc";
@@ -435,5 +436,40 @@ describe("sendTelegram", () => {
     );
     const err = await failure(sendTelegram(full, sleep));
     expect(err!.message).toBe("telegram send failed: 400 " + "x".repeat(60));
+  });
+});
+
+describe("sendTelegramMessage", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("posts to the given chat id and text", async () => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await sendTelegramMessage(42, "hi");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`https://api.telegram.org/bot${TOKEN}/sendMessage`);
+    expect(JSON.parse(init.body)).toEqual({
+      chat_id: 42,
+      text: "hi",
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    });
+  });
+
+  it("throws a token-free error when the token is missing", async () => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
+    vi.stubGlobal("fetch", vi.fn());
+    await expect(sendTelegramMessage(42, "hi")).rejects.toThrow("telegram send failed");
+  });
+
+  it("never leaks the token, chat id or text in the error", async () => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 400 })));
+    const error = await sendTelegramMessage(987654321, "secret text").catch((e) => e as Error);
+    expect(inspect(error, { showHidden: true })).not.toMatch(/SECRET-token|987654321|secret text/);
   });
 });

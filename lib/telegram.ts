@@ -22,7 +22,7 @@ const ESCAPES: Record<string, string> = {
   "'": "&#39;",
 };
 
-const escapeHtml = (value: string): string =>
+export const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (ch) => ESCAPES[ch]);
 
 const pad = (n: number): string => String(n).padStart(2, "0");
@@ -161,31 +161,29 @@ async function failureOf(
   };
 }
 
+type SendOptions = {
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+};
+
 /**
- * Forwards a lead to the manager's Telegram chat. Retries internally (nobody replays the
- * request) and THROWS when delivery ultimately fails so the caller can release its marker.
- * Error messages never contain the token, the URL or any lead data.
+ * Sends one HTML message to a chat. Retries internally (nobody replays the request) and THROWS
+ * when delivery ultimately fails or the token is missing. Error messages never contain the
+ * token, the URL, the chat id or any message text.
  */
-export async function sendTelegram(
-  lead: StoredLead,
-  sleep: (ms: number) => Promise<void> = defaultSleep,
-  now: () => number = Date.now,
+export async function sendTelegramMessage(
+  chatId: string | number,
+  text: string,
+  opts: SendOptions = {},
 ): Promise<void> {
+  const sleep = opts.sleep ?? defaultSleep;
+  const now = opts.now ?? Date.now;
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) {
-    if (!warnedDisabled) {
-      warnedDisabled = true;
-      console.warn(
-        "telegram notifications disabled: bot token or chat id not configured",
-      );
-    }
-    return;
-  }
+  if (!token) throw new Error("telegram send failed: token not configured");
 
   const body = JSON.stringify({
     chat_id: chatId,
-    text: formatLeadMessage(lead),
+    text,
     parse_mode: "HTML",
     disable_web_page_preview: true,
   });
@@ -229,4 +227,26 @@ export async function sendTelegram(
     await sleep(pause);
   }
   throw new Error(`telegram send failed: ${last}`);
+}
+
+/**
+ * Forwards a lead to the manager's Telegram chat; THROWS when delivery ultimately fails so the
+ * caller can release its marker. A no-op (one warning) when the token or chat id is missing.
+ */
+export async function sendTelegram(
+  lead: StoredLead,
+  sleep: (ms: number) => Promise<void> = defaultSleep,
+  now: () => number = Date.now,
+): Promise<void> {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!process.env.TELEGRAM_BOT_TOKEN || !chatId) {
+    if (!warnedDisabled) {
+      warnedDisabled = true;
+      console.warn(
+        "telegram notifications disabled: bot token or chat id not configured",
+      );
+    }
+    return;
+  }
+  await sendTelegramMessage(chatId, formatLeadMessage(lead), { sleep, now });
 }

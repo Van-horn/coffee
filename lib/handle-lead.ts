@@ -79,24 +79,35 @@ export async function handleLead(
     createdAt: new Date(now()).toISOString(),
   };
 
-  let created: boolean;
   try {
-    created = await store.saveLead(stored);
+    await store.saveLead(stored);
   } catch (error) {
     console.error('lead: save failed', lead.idempotencyKey, safeErrorLabel(error));
     try {
-      await store.releasePhone(lead.phone);
+      await store.releasePhone(lead.phone, lead.idempotencyKey);
     } catch (releaseError) {
       console.error('lead: release failed', lead.idempotencyKey, safeErrorLabel(releaseError));
     }
     return unavailable;
   }
 
-  if (created) {
+  // At-least-once: a marker decides who notifies; if the marker store is down, notify anyway.
+  let shouldNotify = true;
+  try {
+    shouldNotify = await store.claimNotification(stored.leadId);
+  } catch (error) {
+    console.error('lead: notification marker failed', stored.leadId, safeErrorLabel(error));
+  }
+  if (shouldNotify) {
     try {
       await notify(stored);
     } catch (error) {
       console.error('lead: notify failed', stored.leadId, safeErrorLabel(error));
+      try {
+        await store.releaseNotification(stored.leadId);
+      } catch (releaseError) {
+        console.error('lead: marker release failed', stored.leadId, safeErrorLabel(releaseError));
+      }
     }
   }
 

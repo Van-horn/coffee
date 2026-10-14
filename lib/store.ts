@@ -14,14 +14,32 @@ export type StoredLead = {
 export interface LeadStore {
   /** null when the phone was claimed now, otherwise the leadId that holds the claim. */
   claimPhone(e164: string, leadId: string, ttlSeconds: number): Promise<string | null>;
-  releasePhone(e164: string): Promise<void>;
-  /** Idempotent per leadId. true when the record was newly created, false when it already existed. */
-  saveLead(lead: StoredLead): Promise<boolean>;
+  /** Compare-and-delete: removes the claim only if it is still held by leadId. */
+  releasePhone(e164: string, leadId: string): Promise<void>;
+  /** Atomic and idempotent per leadId: stores and lists the lead at most once. */
+  saveLead(lead: StoredLead): Promise<void>;
+  /** true when this caller now owns the right to notify about leadId (marker lives 7 days). */
+  claimNotification(leadId: string): Promise<boolean>;
+  releaseNotification(leadId: string): Promise<void>;
   /** Requests from this ip in the current 600 s window, including this one. */
   hitRate(ip: string): Promise<number>;
 }
 
 const RATE_WINDOW_SECONDS = 600;
+const NOTIFY_TTL_SECONDS = 604_800;
+
+const SAVE_LEAD_SCRIPT = `
+if redis.call('SET', KEYS[1], ARGV[1], 'NX') then
+  redis.call('LPUSH', KEYS[2], ARGV[2])
+  return 1
+end
+return 0`;
+
+const RELEASE_PHONE_SCRIPT = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0`;
 
 /** Error label safe for logs: name plus message cut before Upstash's embedded command payload. */
 export function safeErrorLabel(error: unknown): string {
@@ -52,16 +70,25 @@ export function createUpstashStore(): LeadStore {
       return String(existing);
     },
 
-    async releasePhone(e164) {
-      await client().del(`phone:${e164}`);
+    async releasePhone(e164, leadId) {
+      await client().eval(RELEASE_PHONE_SCRIPT, [`phone:${e164}`], [leadId]);
     },
 
     async saveLead(lead) {
-      const r = client();
-      const set = await r.set(`lead:${lead.leadId}`, JSON.stringify(lead), { nx: true });
-      if (set !== 'OK') return false;
-      await r.lpush('leads', lead.leadId);
-      return true;
+      await client().eval(
+        SAVE_LEAD_SCRIPT,
+        [`lead:${lead.leadId}`, 'leads'],
+        [JSON.stringify(lead), lead.leadId],
+      );
+    },
+
+    async claimNotification(leadId) {
+      const set = await client().set(`notify:${leadId}`, '1', { nx: true, ex: NOTIFY_TTL_SECONDS });
+      return set === 'OK';
+    },
+
+    async releaseNotification(leadId) {
+      await client().del(`notify:${leadId}`);
     },
 
     async hitRate(ip) {
@@ -83,6 +110,7 @@ export function createMemoryStore(now: () => number = Date.now): MemoryStore {
   const phones = new Map<string, { leadId: string; expiresAt: number }>();
   const saved = new Map<string, StoredLead>();
   const list: string[] = [];
+  const notified = new Set<string>();
   const rates = new Map<string, { count: number; expiresAt: number }>();
 
   return {
@@ -93,15 +121,24 @@ export function createMemoryStore(now: () => number = Date.now): MemoryStore {
       return null;
     },
 
-    async releasePhone(e164) {
-      phones.delete(e164);
+    async releasePhone(e164, leadId) {
+      if (phones.get(e164)?.leadId === leadId) phones.delete(e164);
     },
 
     async saveLead(lead) {
-      if (saved.has(lead.leadId)) return false;
+      if (saved.has(lead.leadId)) return;
       saved.set(lead.leadId, lead);
       list.unshift(lead.leadId);
+    },
+
+    async claimNotification(leadId) {
+      if (notified.has(leadId)) return false;
+      notified.add(leadId);
       return true;
+    },
+
+    async releaseNotification(leadId) {
+      notified.delete(leadId);
     },
 
     async hitRate(ip) {

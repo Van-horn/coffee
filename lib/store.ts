@@ -109,7 +109,7 @@ export function createMemoryStore(now: () => number = Date.now): MemoryStore {
   const phones = new Map<string, { leadId: string; expiresAt: number }>();
   const saved = new Map<string, StoredLead>();
   const list: string[] = [];
-  const notified = new Set<string>();
+  const notified = new Map<string, number>();
   const rates = new Map<string, { count: number; expiresAt: number }>();
 
   return {
@@ -131,8 +131,9 @@ export function createMemoryStore(now: () => number = Date.now): MemoryStore {
     },
 
     async claimNotification(leadId) {
-      if (notified.has(leadId)) return false;
-      notified.add(leadId);
+      const expiresAt = notified.get(leadId);
+      if (expiresAt !== undefined && expiresAt > now()) return false;
+      notified.set(leadId, now() + NOTIFY_TTL_SECONDS * 1000);
       return true;
     },
 

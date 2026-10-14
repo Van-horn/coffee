@@ -62,12 +62,20 @@ const responsive = (
   mobile: [number, number],
   tablet: [number, number],
   desktop: [number, number],
-) => ({
-  fontSize: mobile[0],
-  lineHeight: `${mobile[1]}px`,
-  [base.breakpoints.up('sm')]: { fontSize: tablet[0], lineHeight: `${tablet[1]}px` },
-  [base.breakpoints.up('md')]: { fontSize: desktop[0], lineHeight: `${desktop[1]}px` },
-});
+  // Optional larger size reached at a 2560 px screen: the desktop size holds up to 1440 and grows linearly from there.
+  cap?: [number, number],
+) => {
+  const fluid = (from: number, to: number) =>
+    `clamp(${from}px, calc(${from}px + (100vw - 1440px) * ${((to - from) / 1120).toFixed(5)}), ${to}px)`;
+  return {
+    fontSize: mobile[0],
+    lineHeight: `${mobile[1]}px`,
+    [base.breakpoints.up('sm')]: { fontSize: tablet[0], lineHeight: `${tablet[1]}px` },
+    [base.breakpoints.up('md')]: cap
+      ? { fontSize: fluid(desktop[0], cap[0]), lineHeight: fluid(desktop[1], cap[1]) }
+      : { fontSize: desktop[0], lineHeight: `${desktop[1]}px` },
+  };
+};
 
 const theme = createTheme({
   breakpoints: base.breakpoints,
@@ -90,10 +98,10 @@ const theme = createTheme({
     hero: {
       fontWeight: 400,
       letterSpacing: '-0.005em',
-      ...responsive([36, 44], [48, 56], [56, 64]),
+      ...responsive([36, 44], [48, 56], [56, 64], [80, 90]),
     },
-    h1: { fontWeight: 400, letterSpacing: '-0.005em', ...responsive([36, 44], [48, 56], [56, 64]) },
-    h2: { fontWeight: 500, ...responsive([28, 36], [34, 42], [40, 48]) },
+    h1: { fontWeight: 400, letterSpacing: '-0.005em', ...responsive([36, 44], [48, 56], [56, 64], [80, 90]) },
+    h2: { fontWeight: 500, ...responsive([28, 36], [34, 42], [40, 48], [56, 66]) },
     h3: { fontWeight: 500, fontSize: 22, lineHeight: '28px', [base.breakpoints.up('sm')]: { fontSize: 24, lineHeight: '32px' } },
     bodyL: { fontWeight: 400, fontSize: 18, lineHeight: '29px' },
     bodyM: { fontWeight: 400, fontSize: 16, lineHeight: '26px' },

@@ -61,7 +61,6 @@ const lead = (): StoredLead => ({
   leadId: 'key-0001',
   name: 'Anna',
   phone: '+375291234567',
-  telegram: '',
   interest: 'order',
   comment: '',
   attribution: {},
@@ -145,46 +144,3 @@ describe('safeErrorLabel', () => {
   });
 });
 
-describe('bot greeting and getLead', () => {
-  it('upstash getLead parses the stored JSON string and an already-parsed object', async () => {
-    const store = createUpstashStore();
-    h.kv.set('lead:key-0001', JSON.stringify(lead()));
-    expect(await store.getLead('key-0001')).toEqual(lead());
-    h.kv.set('lead:key-0002', lead() as unknown as string);
-    expect(await store.getLead('key-0002')).toEqual(lead());
-  });
-
-  it('upstash getLead returns null for a missing, corrupt or wrongly shaped value', async () => {
-    const store = createUpstashStore();
-    expect(await store.getLead('nope-0001')).toBeNull();
-    h.kv.set('lead:bad-0001', '{not json');
-    expect(await store.getLead('bad-0001')).toBeNull();
-    h.kv.set('lead:bad-0002', JSON.stringify({ ...lead(), interest: 'x' }));
-    expect(await store.getLead('bad-0002')).toBeNull();
-    h.kv.set('lead:bad-0003', JSON.stringify({ ...lead(), attribution: { a: 1 } }));
-    expect(await store.getLead('bad-0003')).toBeNull();
-    h.kv.set('lead:bad-0004', '123');
-    expect(await store.getLead('bad-0004')).toBeNull();
-  });
-
-  it('upstash claimBotGreeting is SET NX with a 30 day TTL; release deletes it', async () => {
-    const store = createUpstashStore();
-    expect(await store.claimBotGreeting('key-0001')).toBe(true);
-    expect(h.setOpts.at(-1)).toEqual({ key: 'tgstart:key-0001', opts: { nx: true, ex: 2_592_000 } });
-    expect(await store.claimBotGreeting('key-0001')).toBe(false);
-    await store.releaseBotGreeting('key-0001');
-    expect(h.kv.has('tgstart:key-0001')).toBe(false);
-    expect(await store.claimBotGreeting('key-0001')).toBe(true);
-  });
-
-  it('memory store: getLead returns a saved lead or null, the greeting is claim-once with release', async () => {
-    const store = createMemoryStore();
-    expect(await store.getLead('key-0001')).toBeNull();
-    await store.saveLead(lead());
-    expect(await store.getLead('key-0001')).toEqual(lead());
-    expect(await store.claimBotGreeting('key-0001')).toBe(true);
-    expect(await store.claimBotGreeting('key-0001')).toBe(false);
-    await store.releaseBotGreeting('key-0001');
-    expect(await store.claimBotGreeting('key-0001')).toBe(true);
-  });
-});

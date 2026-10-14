@@ -4,7 +4,6 @@ export type StoredLead = {
   leadId: string;
   name: string;
   phone: string;
-  telegram: string;
   interest: 'subscription' | 'order' | 'question';
   comment: string;
   attribution: Record<string, string>;
@@ -23,52 +22,10 @@ export interface LeadStore {
   releaseNotification(leadId: string): Promise<void>;
   /** Requests from this ip in the current 600 s window, including this one. */
   hitRate(ip: string): Promise<number>;
-  /** The stored lead, or null when it is missing, corrupt or not shaped like a lead. */
-  getLead(leadId: string): Promise<StoredLead | null>;
-  /** true when this caller now owns the one bot greeting for leadId (marker lives 30 days). */
-  claimBotGreeting(leadId: string): Promise<boolean>;
-  releaseBotGreeting(leadId: string): Promise<void>;
 }
 
 const RATE_WINDOW_SECONDS = 600;
 const NOTIFY_TTL_SECONDS = 604_800;
-const GREETING_TTL_SECONDS = 2_592_000;
-
-const INTERESTS = new Set(['subscription', 'order', 'question']);
-
-const isString = (v: unknown): v is string => typeof v === 'string';
-
-/** Accepts a JSON string or an already-parsed value (Upstash auto-parses); null unless lead-shaped. */
-function parseStoredLead(raw: unknown): StoredLead | null {
-  let value = raw;
-  if (typeof raw === 'string') {
-    try {
-      value = JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  }
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
-  const v = value as Record<string, unknown>;
-  const attribution = v.attribution;
-  if (
-    !isString(v.leadId) ||
-    !isString(v.name) ||
-    !isString(v.phone) ||
-    !isString(v.telegram) ||
-    !isString(v.comment) ||
-    !isString(v.createdAt) ||
-    !isString(v.interest) ||
-    !INTERESTS.has(v.interest) ||
-    typeof attribution !== 'object' ||
-    attribution === null ||
-    Array.isArray(attribution) ||
-    !Object.values(attribution).every(isString)
-  ) {
-    return null;
-  }
-  return value as StoredLead;
-}
 
 const SAVE_LEAD_SCRIPT = `
 if redis.call('SET', KEYS[1], ARGV[1], 'NX') then
@@ -133,19 +90,6 @@ export function createUpstashStore(): LeadStore {
       await client().del(`notify:${leadId}`);
     },
 
-    async getLead(leadId) {
-      return parseStoredLead(await client().get(`lead:${leadId}`));
-    },
-
-    async claimBotGreeting(leadId) {
-      const set = await client().set(`tgstart:${leadId}`, '1', { nx: true, ex: GREETING_TTL_SECONDS });
-      return set === 'OK';
-    },
-
-    async releaseBotGreeting(leadId) {
-      await client().del(`tgstart:${leadId}`);
-    },
-
     async hitRate(ip) {
       const r = client();
       const key = `rl:${ip}`;
@@ -166,7 +110,6 @@ export function createMemoryStore(now: () => number = Date.now): MemoryStore {
   const saved = new Map<string, StoredLead>();
   const list: string[] = [];
   const notified = new Set<string>();
-  const greeted = new Set<string>();
   const rates = new Map<string, { count: number; expiresAt: number }>();
 
   return {
@@ -195,20 +138,6 @@ export function createMemoryStore(now: () => number = Date.now): MemoryStore {
 
     async releaseNotification(leadId) {
       notified.delete(leadId);
-    },
-
-    async getLead(leadId) {
-      return saved.get(leadId) ?? null;
-    },
-
-    async claimBotGreeting(leadId) {
-      if (greeted.has(leadId)) return false;
-      greeted.add(leadId);
-      return true;
-    },
-
-    async releaseBotGreeting(leadId) {
-      greeted.delete(leadId);
     },
 
     async hitRate(ip) {

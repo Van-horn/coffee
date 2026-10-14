@@ -3,7 +3,7 @@ import { isOrderOpen, nextRoast } from '@/lib/schedule';
 
 const WEEK_MS = 7 * 24 * 3_600_000;
 
-/** Pure sentence about the next roast and the order cutoff; shared by the page and the bot message. */
+/** Pure sentence about the next roast and the order cutoff; used by the page. */
 export function nextRoastText(now: Date): string {
   const roast = nextRoast(now);
   if (isOrderOpen(now)) return `${formatRuDate(roast)} · заявки до среды, 20:00`;

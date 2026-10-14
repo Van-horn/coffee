@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseLead } from '@/lib/lead-schema';
 import {
   buildPayload,
+  leadFingerprint,
   plural,
   submitLead,
   validateLeadFields,
@@ -111,6 +112,10 @@ describe('plural', () => {
     [21, 'поле'],
     [22, 'поля'],
     [25, 'полей'],
+    [0, 'полей'],
+    [14, 'полей'],
+    [111, 'полей'],
+    [101, 'поле'],
   ])('%i -> %s', (n, word) => {
     expect(plural(n, 'поле', 'поля', 'полей')).toBe(word);
   });
@@ -154,18 +159,18 @@ describe('submitLead', () => {
 
   it('503 is retryable', async () => {
     const r = await submitLead(payload, json(503, { ok: false, message: 'Сервис недоступен' }));
-    expect(r).toEqual({ kind: 'failed', message: 'Сервис недоступен', retryable: true });
+    expect(r).toEqual({ kind: 'failed', message: 'Сервис недоступен' });
   });
 
   it('network error is retryable with a generic message', async () => {
     const r = await submitLead(payload, vi.fn().mockRejectedValue(new TypeError('fail')));
-    expect(r).toEqual({ kind: 'failed', message: 'Не удалось отправить заявку', retryable: true });
+    expect(r).toEqual({ kind: 'failed', message: 'Не удалось отправить заявку' });
   });
 
   it('non-JSON body is a failure', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response('<html>', { status: 502 }));
     const r = await submitLead(payload, fetchImpl);
-    expect(r).toMatchObject({ kind: 'failed', message: 'Не удалось отправить заявку', retryable: true });
+    expect(r).toMatchObject({ kind: 'failed', message: 'Не удалось отправить заявку' });
   });
 
   it('times out through AbortController', async () => {
@@ -178,6 +183,17 @@ describe('submitLead', () => {
     );
     const pending = submitLead(payload, fetchImpl as unknown as typeof fetch, 15000);
     await vi.advanceTimersByTimeAsync(15000);
-    expect(await pending).toEqual({ kind: 'failed', message: 'Не удалось отправить заявку', retryable: true });
+    expect(await pending).toEqual({ kind: 'failed', message: 'Не удалось отправить заявку' });
+  });
+});
+
+describe('leadFingerprint', () => {
+  const ctx = { idempotencyKey: 'key-12345678', renderedAt: 1, website: '', attribution: {} };
+  it('ignores formatting and key, changes with content', () => {
+    const a = buildPayload(base, ctx);
+    const b = buildPayload({ ...base, phone: '80291234567', name: ' Анна ' }, { ...ctx, idempotencyKey: 'other-key-1234' });
+    expect(leadFingerprint(a)).toBe(leadFingerprint(b));
+    expect(leadFingerprint(buildPayload({ ...base, phone: '+375 33 111-22-33' }, ctx))).not.toBe(leadFingerprint(a));
+    expect(leadFingerprint(buildPayload({ ...base, comment: 'x' }, ctx))).not.toBe(leadFingerprint(a));
   });
 });

@@ -15,6 +15,7 @@ import {
   GENERIC_FAILURE,
   buildPayload,
   isInterest,
+  leadFingerprint,
   plural,
   submitLead,
   validateLeadFields,
@@ -28,6 +29,14 @@ type FieldKey = 'name' | 'phone' | 'telegram' | 'interest' | 'comment';
 
 const IDEM_KEY = 'kvarta_idem';
 const IDEM_RE = /^[A-Za-z0-9_-]{8,64}$/;
+const REFRESH_MESSAGE = 'Обновите страницу и попробуйте ещё раз.';
+const HONEYPOT_NAME = 'hp_field_x7';
+
+// An idempotency key is bound to the content it was first sent with (fingerprint).
+interface KeyRecord {
+  key: string;
+  fp: string;
+}
 const FIELD_ORDER: FieldKey[] = ['name', 'phone', 'telegram', 'interest', 'comment'];
 const FIELD_LABEL: Record<FieldKey, string> = {
   name: 'Имя',
@@ -53,22 +62,31 @@ function generateKey(): string {
   return `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
 }
 
-function readStoredKey(): string | null {
+function readStoredKey(): KeyRecord | null {
   try {
-    const stored = window.sessionStorage.getItem(IDEM_KEY);
-    return stored && IDEM_RE.test(stored) ? stored : null;
+    const raw = window.sessionStorage.getItem(IDEM_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const { key, fp } = parsed as Record<string, unknown>;
+    return typeof key === 'string' && IDEM_RE.test(key) && typeof fp === 'string' ? { key, fp } : null;
   } catch {
     return null;
   }
 }
 
-function storeKey(key: string | null) {
+function storeKey(record: KeyRecord | null) {
   try {
-    if (key) window.sessionStorage.setItem(IDEM_KEY, key);
+    if (record) window.sessionStorage.setItem(IDEM_KEY, JSON.stringify(record));
     else window.sessionStorage.removeItem(IDEM_KEY);
   } catch {
     // private mode: the in-memory key still covers retries on this page
   }
+}
+
+function pageStart(): number {
+  const origin = typeof performance !== 'undefined' ? performance.timeOrigin : NaN;
+  return Number.isFinite(origin) && origin > 0 ? Math.round(origin) : Date.now();
 }
 
 function safeAttribution(): Record<string, string> {
@@ -159,11 +177,14 @@ export default function LeadForm() {
   const [attempted, setAttempted] = useState(false);
   const [status, setStatus] = useState<Status>('idle');
   const [failMessage, setFailMessage] = useState('');
+  const [extraMessages, setExtraMessages] = useState<string[]>([]);
+  const [hydrated, setHydrated] = useState(false);
   const [done, setDone] = useState<{ phone: string; telegram: string } | null>(null);
 
   const inFlight = useRef(false);
   const renderedAt = useRef(0);
-  const keyRef = useRef<string | null>(null);
+  const keyRef = useRef<KeyRecord | null>(null);
+  const pendingFocus = useRef<FieldKey | null>(null);
   const honeypotRef = useRef<HTMLInputElement>(null);
   const fieldRefs = useRef<Partial<Record<FieldKey, HTMLElement | null>>>({});
   const interestRef = useRef<HTMLFieldSetElement>(null);
@@ -171,42 +192,44 @@ export default function LeadForm() {
   const retryRef = useRef<HTMLButtonElement>(null);
   const focusNameAfterReset = useRef(false);
 
-  // Capture the render time and follow ?interest= on mount, hashchange and popstate.
-  useEffect(() => {
-    renderedAt.current = Date.now();
-    const sync = () => {
-      const wanted = new URLSearchParams(window.location.search).get('interest');
-      if (isInterest(wanted)) setValues((prev) => (prev.interest === wanted ? prev : { ...prev, interest: wanted }));
-    };
-    sync();
-    window.addEventListener('hashchange', sync);
-    window.addEventListener('popstate', sync);
-    return () => {
-      window.removeEventListener('hashchange', sync);
-      window.removeEventListener('popstate', sync);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (status === 'success') successHeadingRef.current?.focus();
-    if (status === 'failed') retryRef.current?.focus();
-    if (status === 'idle' && focusNameAfterReset.current) {
-      focusNameAfterReset.current = false;
-      fieldRefs.current.name?.focus();
-    }
-  }, [status]);
-
   const focusField = useCallback((key: FieldKey) => {
     if (key === 'interest') interestRef.current?.querySelector<HTMLInputElement>('input:checked, input')?.focus();
     else fieldRefs.current[key]?.focus();
   }, []);
 
+  // On mount: mark hydrated, capture the page start time and read ?interest= once.
+  // Client-only values (URL, clock) cannot be read during SSR, so state is set after mount on purpose.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    renderedAt.current = pageStart();
+    const wanted = new URLSearchParams(window.location.search).get('interest');
+    if (isInterest(wanted)) setValues((prev) => (prev.interest === wanted ? prev : { ...prev, interest: wanted }));
+    setHydrated(true);
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (status === 'success') successHeadingRef.current?.focus();
+    if (status === 'failed') retryRef.current?.focus();
+    if (status === 'idle' && pendingFocus.current) {
+      const key = pendingFocus.current;
+      pendingFocus.current = null;
+      focusField(key);
+    }
+    if (status === 'idle' && focusNameAfterReset.current) {
+      focusNameAfterReset.current = false;
+      fieldRefs.current.name?.focus();
+    }
+  }, [status, focusField]);
+
   const showErrors = useCallback(
-    (next: Record<string, string>) => {
+    (next: Record<string, string>, extras: string[] = [], deferFocus = false) => {
       setErrors(next);
+      setExtraMessages(extras);
       setAttempted(true);
       const first = FIELD_ORDER.find((key) => next[key]);
-      if (first) focusField(first);
+      if (first && deferFocus) pendingFocus.current = first;
+      else if (first) focusField(first);
     },
     [focusField],
   );
@@ -250,15 +273,20 @@ export default function LeadForm() {
     }
     inFlight.current = true;
     setStatus('sending');
+    setExtraMessages([]);
     try {
-      if (!keyRef.current) keyRef.current = readStoredKey() ?? generateKey();
-      storeKey(keyRef.current);
-      const payload = buildPayload(values, {
-        idempotencyKey: keyRef.current,
+      const draft = buildPayload(values, {
+        idempotencyKey: 'pending',
         renderedAt: renderedAt.current,
         website: honeypotRef.current?.value ?? '',
         attribution: safeAttribution(),
       });
+      const fp = leadFingerprint(draft);
+      let record = keyRef.current ?? readStoredKey();
+      if (!record || record.fp !== fp) record = { key: generateKey(), fp };
+      keyRef.current = record;
+      storeKey(record);
+      const payload = { ...draft, idempotencyKey: record.key };
       const result = await submitLead(payload);
       if (result.kind === 'ok') {
         keyRef.current = null;
@@ -269,12 +297,18 @@ export default function LeadForm() {
         setStatus('success');
       } else if (result.kind === 'invalid') {
         const known: Record<string, string> = {};
-        for (const key of FIELD_ORDER) if (result.errors[key]) known[key] = result.errors[key];
+        const unknown: string[] = [];
+        for (const [field, message] of Object.entries(result.errors)) {
+          if (FIELD_ORDER.includes(field as FieldKey)) known[field] = message;
+          else if (typeof message === 'string' && message) unknown.push(message);
+        }
         if (Object.keys(known).length > 0) {
+          showErrors(known, unknown, true);
           setStatus('idle');
-          showErrors(known);
         } else {
-          setFailMessage(GENERIC_FAILURE);
+          keyRef.current = null;
+          storeKey(null);
+          setFailMessage(REFRESH_MESSAGE);
           setStatus('failed');
         }
       } else {
@@ -298,7 +332,7 @@ export default function LeadForm() {
   };
 
   const errorKeys = FIELD_ORDER.filter((key) => errors[key]);
-  const showSummary = attempted && errorKeys.length > 0;
+  const showSummary = attempted && (errorKeys.length > 0 || extraMessages.length > 0);
 
   const describedBy = (key: FieldKey, hasHint: boolean) => {
     const ids: string[] = [];
@@ -380,9 +414,11 @@ export default function LeadForm() {
   }
 
   const failedGeneric = failMessage === GENERIC_FAILURE;
+  const failedRefresh = failMessage === REFRESH_MESSAGE;
+  const serverMentionsCall = /позвоните нам\.?\s*$/i.test(failMessage);
 
   return (
-    <Box component="form" noValidate onSubmit={onSubmit} aria-label="Заявка" sx={cardSx}>
+    <Box component="form" method="post" noValidate onSubmit={onSubmit} aria-label="Заявка" sx={cardSx}>
       <Typography variant="h3" component="h3" sx={{ m: 0, mb: 3 }}>
         Заявка
       </Typography>
@@ -411,6 +447,11 @@ export default function LeadForm() {
             <Typography variant="bodyS" sx={{ color: colors.ink, m: 0, mt: 0.5 }}>
               {`Проверьте: ${errorKeys.map((key) => FIELD_LABEL[key]).join(', ')}. Ошибки отмечены под полями.`}
             </Typography>
+            {extraMessages.map((message) => (
+              <Typography key={message} variant="bodyS" sx={{ color: colors.ink, m: 0, mt: 0.5 }}>
+                {message}
+              </Typography>
+            ))}
           </Box>
         </Box>
       ) : null}
@@ -439,13 +480,19 @@ export default function LeadForm() {
               <Typography variant="bodyS" sx={{ color: colors.ink, m: 0, mt: 0.5 }}>
                 {`Проверьте интернет и нажмите «Повторить». Данные в форме сохранены. Или позвоните нам: ${CONTACT.phoneDisplay}.`}
               </Typography>
+            ) : failedRefresh ? (
+              <Typography variant="bodyS" sx={{ color: colors.ink, m: 0, mt: 0.5 }}>
+                {`${REFRESH_MESSAGE} Данные в форме сохранены.`}
+              </Typography>
             ) : (
               <>
                 <Typography variant="bodyS" sx={{ color: colors.ink, m: 0, mt: 0.5 }}>
                   {failMessage}
                 </Typography>
                 <Typography variant="bodyS" sx={{ color: colors.ink, m: 0, mt: 0.5 }}>
-                  {`Данные в форме сохранены. Или позвоните нам: ${CONTACT.phoneDisplay}.`}
+                  {serverMentionsCall
+                    ? 'Данные в форме сохранены.'
+                    : `Данные в форме сохранены. Или позвоните нам: ${CONTACT.phoneDisplay}.`}
                 </Typography>
               </>
             )}
@@ -649,7 +696,7 @@ export default function LeadForm() {
           aria-hidden="true"
           sx={{ position: 'absolute', left: '-10000px', top: 'auto', width: '1px', height: '1px', overflow: 'hidden' }}
         >
-          <input ref={honeypotRef} type="text" name="website" tabIndex={-1} autoComplete="off" defaultValue="" />
+          <input ref={honeypotRef} type="text" id={HONEYPOT_NAME} name={HONEYPOT_NAME} tabIndex={-1} autoComplete="off" defaultValue="" />
         </Box>
 
         <Typography variant="bodyS" sx={{ color: colors.inkSoft, m: 0 }}>
@@ -670,7 +717,7 @@ export default function LeadForm() {
             type="submit"
             variant="contained"
             fullWidth
-            disabled={pending}
+            disabled={pending || !hydrated}
             aria-busy={pending || undefined}
             sx={{
               height: 56,

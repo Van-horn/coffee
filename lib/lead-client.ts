@@ -41,7 +41,7 @@ export interface PayloadContext {
 export type SubmitResult =
   | { kind: 'ok'; leadId: string; duplicate: boolean }
   | { kind: 'invalid'; errors: Record<string, string> }
-  | { kind: 'failed'; message: string; retryable: boolean };
+  | { kind: 'failed'; message: string };
 
 export const GENERIC_FAILURE = 'Не удалось отправить заявку';
 
@@ -79,6 +79,11 @@ export function buildPayload(values: FormValues, ctx: PayloadContext): LeadPaylo
   };
 }
 
+/** Identity of what the lead says: the idempotency key is only reusable while this stays the same. */
+export function leadFingerprint(payload: LeadPayload): string {
+  return JSON.stringify([payload.name, payload.phone, payload.telegram, payload.interest, payload.comment]);
+}
+
 /** Russian plural form: plural(1, 'поле', 'поля', 'полей') -> 'поле'. */
 export function plural(n: number, one: string, few: string, many: string): string {
   const abs = Math.abs(n);
@@ -94,7 +99,6 @@ function failed(message?: unknown): SubmitResult {
   return {
     kind: 'failed',
     message: typeof message === 'string' && message ? message : GENERIC_FAILURE,
-    retryable: true,
   };
 }
 

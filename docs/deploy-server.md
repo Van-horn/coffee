@@ -36,7 +36,7 @@ do for a throwaway preview. Use a server with a persistent disk.
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | yes | Bot that posts orders to the private channel. See `docs/telegram-channel.md`. |
 | `TELEGRAM_CHAT_ID` | private | The channel id (for example `-1001234567890`). Without the token and chat id the site still works and saves leads, it just does not notify. |
-| `LEADS_DB_PATH` | no | Database file. Optional: defaults to `./data/leads.sqlite` under the working directory. On a server always set it explicitly: `/data/leads.sqlite` (Docker) or `/var/lib/kvarta/leads.sqlite` (systemd). |
+| `LEADS_DB_PATH` | no | Database file. Optional: defaults to `./data/leads.sqlite` under the working directory. On a server it is always explicit, and set by `docker-compose.yml` (`/data/leads.sqlite`) or the systemd unit (`/var/lib/kvarta/leads.sqlite`), not in the env file. |
 | `NEXT_PUBLIC_SITE_URL` | no | Public origin, for example `https://kvarta.example`. Needed at **build time**: Next.js inlines `NEXT_PUBLIC_*` values into the bundle (canonical URL, Open Graph, sitemap), so changing it later requires a rebuild. |
 | `PORT`, `HOSTNAME` | no | Standalone server listen address. Keep `HOSTNAME=127.0.0.1` outside Docker so only nginx can reach it. |
 | `ALLOW_EPHEMERAL_FILE_STORE` | no | Vercel guard override. Leave unset. |
@@ -59,14 +59,30 @@ only), so nothing font-related is needed at runtime.
 
 ### nginx and TLS (both paths)
 
+Get the certificate first with `certonly` (certbot only obtains it and does not rewrite the config, so the
+redirect block is never edited into a loop), then enable the HTTPS block:
+
 ```bash
 sudo cp deploy/nginx.conf /etc/nginx/sites-available/kvarta
 sudo sed -i 's/kvarta.example/your.domain/g' /etc/nginx/sites-available/kvarta
+sudo mkdir -p /var/www/certbot
 sudo ln -s /etc/nginx/sites-available/kvarta /etc/nginx/sites-enabled/kvarta
-# certificates first (nginx cannot start with a missing certificate file): temporarily comment out the 443 server block, then
-sudo certbot --nginx -d your.domain
+# 1. nginx cannot load the 443 block before the certificate files exist: comment out the whole
+#    "listen 443" server block (the second server { } in the file) for now.
+sudo nginx -t && sudo systemctl reload nginx          # port 80 only; it serves /.well-known/acme-challenge/
+# 2. obtain the certificate only (webroot method, uses the challenge location of the port-80 block)
+sudo certbot certonly --webroot -w /var/www/certbot -d your.domain
+# 3. uncomment the 443 block, test and reload
 sudo nginx -t && sudo systemctl reload nginx
+# 4. renewal: check it now, and reload nginx after each renewal
+sudo certbot renew --dry-run
+echo -e '#!/bin/sh\nsystemctl reload nginx' | sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-nginx >/dev/null
+sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx
 ```
+
+The config was checked with `nginx -t` on nginx 1.18, 1.22 and the current release. `listen 443 ssl http2;` is
+accepted by all of them (nginx 1.25.1 and newer print a deprecation warning and also accept a separate
+`http2 on;` line instead). The port-80 block serves the ACME challenge and redirects everything else.
 
 What the config does: HTTP redirects to HTTPS; proxies to `127.0.0.1:3000`; **overwrites** `X-Forwarded-For` with
 `$remote_addr` (the app rate-limits on the first entry, so a client-supplied header must never pass through);
@@ -100,7 +116,7 @@ Update:
 cd /srv/kvarta && git pull && docker compose up -d --build   # the volume, and the leads, stay
 ```
 
-Logs: `docker compose logs -f kvarta`. Export: `docker compose exec -T kvarta node scripts/export-leads.mjs > leads.csv`.
+Logs: `docker compose logs -f kvarta` (compose rotates them: 5 files of 10 MB). Export: see "Exporting leads".
 
 ## B. Bare Node + systemd
 
@@ -111,10 +127,13 @@ sudo useradd --system --home /var/lib/kvarta --shell /usr/sbin/nologin kvarta
 sudo install -d -o kvarta -g kvarta -m 0700 /var/lib/kvarta /var/backups/kvarta
 sudo install -d -o root -g kvarta -m 0750 /etc/kvarta
 sudo git clone <repo> /opt/kvarta && sudo chown -R kvarta:kvarta /opt/kvarta
-sudo -u kvarta sh -c 'cd /opt/kvarta && npm ci --ignore-scripts'
+# --cache keeps the npm cache out of the data directory and the home of the service user
+sudo -u kvarta sh -c 'cd /opt/kvarta && npm ci --ignore-scripts --cache /tmp/npm-cache'
 
 sudo install -m 0640 -o root -g kvarta /dev/null /etc/kvarta/env
-sudoedit /etc/kvarta/env      # TELEGRAM_BOT_TOKEN=...  TELEGRAM_CHAT_ID=...  (names only in git, values only here)
+# Only secrets go here (TELEGRAM_BOT_TOKEN=..., TELEGRAM_CHAT_ID=...). Do NOT put LEADS_DB_PATH in this file:
+# the unit sets it, and an empty or different value in the EnvironmentFile would override the unit.
+sudoedit /etc/kvarta/env
 
 # build with the public URL (build-time variable), then copy what the standalone folder does not include
 sudo -u kvarta sh -c 'cd /opt/kvarta && NEXT_PUBLIC_SITE_URL=https://your.domain npm run build'
@@ -122,8 +141,14 @@ sudo -u kvarta sh -c 'cd /opt/kvarta && mkdir -p public .next/standalone/.next \
   && cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/'
 
 sudo cp deploy/kvarta.service /etc/systemd/system/
+# The unit runs /usr/bin/node: adjust ExecStart if Node is installed elsewhere (check with `command -v node`).
 sudo systemctl daemon-reload && sudo systemctl enable --now kvarta
 systemctl status kvarta && curl -sI http://127.0.0.1:3000/ | head -1
+
+# daily backups: the backup directory (and the job's log) were created above, 0700, owned by kvarta
+sudo cp deploy/backup.cron /etc/cron.d/kvarta-backup
+# one-line manual test of exactly what cron runs; it must print a path and leave a file behind
+sudo -u kvarta sh -c 'cd /opt/kvarta && LEADS_DB_PATH=/var/lib/kvarta/leads.sqlite node scripts/backup-db.mjs --dir /var/backups/kvarta --keep 14 >> /var/backups/kvarta/backup.log 2>&1' && ls -l /var/backups/kvarta
 ```
 
 `.next/standalone` contains `server.js` and the traced `node_modules` (including `better-sqlite3`); `public/` and
@@ -138,7 +163,7 @@ cd /opt/kvarta && sudo -u kvarta git pull && sudo -u kvarta npm ci --ignore-scri
 sudo systemctl restart kvarta
 ```
 
-Logs: `journalctl -u kvarta -f`. Export: `sudo -u kvarta LEADS_DB_PATH=/var/lib/kvarta/leads.sqlite npm --prefix /opt/kvarta run -s leads:export > leads.csv`.
+Logs: `journalctl -u kvarta -f`. Export: see "Exporting leads".
 
 ## Backups and restore
 
@@ -171,7 +196,17 @@ Check afterwards: `npm run leads:export -- --db /var/lib/kvarta/leads.sqlite | w
 
 `npm run leads:export -- --db /path/leads.sqlite` prints CSV; add `--json` for JSON. Columns: `created_at` (ISO),
 `id`, `interest`, `name`, `phone`, `comment`, `utm_source`, `utm_medium`, `utm_campaign`, `landing`, `referrer`. It opens the
-database read-only and does not load the web app. Cells starting with `=`, `+`, `-` or `@` get a leading single quote
+database read-only and does not load the web app. The output is personal data: create the file private
+before writing into it, never with a plain `>` under the default umask.
+
+```bash
+# path B
+( umask 077; sudo -u kvarta env LEADS_DB_PATH=/var/lib/kvarta/leads.sqlite node /opt/kvarta/scripts/export-leads.mjs > leads.csv )
+# path A
+( umask 077; docker compose exec -T kvarta node scripts/export-leads.mjs > leads.csv )
+```
+
+Cells starting with `=`, `+`, `-` or `@` get a leading single quote
 so spreadsheets do not run them as formulas (phones therefore appear as `'+375...`).
 
 ## Privacy and retention
@@ -183,6 +218,9 @@ so spreadsheets do not run them as formulas (phones therefore appear as `'+375..
   npm run leads:purge -- --db /var/lib/kvarta/leads.sqlite --older-than-days 365          # dry run: only counts
   npm run leads:purge -- --db /var/lib/kvarta/leads.sqlite --older-than-days 365 --apply  # deletes
   ```
+  With `--apply` the script turns on `secure_delete`, deletes, then runs `VACUUM` and truncates the WAL so purged
+  names and phones do not linger in free pages. The cost: `VACUUM` rewrites the whole file and briefly blocks
+  writers (seconds for a database this size), so run it off-peak.
   Backups keep older data until they rotate out (14 days by default).
 - Orders also go to the private Telegram channel; delete messages there on the same schedule.
 
@@ -197,5 +235,6 @@ so spreadsheets do not run them as formulas (phones therefore appear as `'+375..
 - **Database cannot be opened** (permissions, corrupt file): the app logs `lead store: cannot open the file database`
   once and answers 503; fix the cause, then restart. Restore from a backup if the file is corrupt.
 - **Several processes:** pm2 cluster or two containers on one volume are safe, all writes are `BEGIN IMMEDIATE`
-  transactions with a 5 s busy timeout. The volume must be a local disk, not NFS.
+  transactions with a 5 s busy timeout. The volume must be a local disk, not NFS. Database calls are
+  synchronous: while a writer waits on a lock (`SQLITE_BUSY`, up to 5 s) that Node process serves no other request.
 - **Rate limit address:** correct only because nginx overwrites `X-Forwarded-For`. Never publish port 3000.

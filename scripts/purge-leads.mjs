@@ -15,7 +15,14 @@ export function purgeLeads({ dbPath, days, apply = false, now = Date.now() }) {
     db.pragma('busy_timeout = 5000');
     const { n } = db.prepare('SELECT COUNT(*) AS n FROM leads WHERE created_at < ?').get(cutoff);
     if (!apply) return { matched: n, deleted: 0, cutoff: new Date(cutoff).toISOString() };
+    // Overwrite deleted content, then rewrite the file and truncate the WAL so purged personal data
+    // does not linger in free pages or the log. VACUUM rewrites the whole file: seconds for a small database.
+    db.pragma('secure_delete = ON');
     const deleted = db.prepare('DELETE FROM leads WHERE created_at < ?').run(cutoff).changes;
+    if (deleted > 0) {
+      db.exec('VACUUM');
+      db.pragma('wal_checkpoint(TRUNCATE)');
+    }
     return { matched: n, deleted, cutoff: new Date(cutoff).toISOString() };
   } finally {
     db.close();

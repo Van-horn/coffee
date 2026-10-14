@@ -5,3 +5,13 @@ node_modules
 .vercel
 .cursor
 2026-*-command-message*.txt
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# testing
+/coverage
+
+# next.js
+/out/

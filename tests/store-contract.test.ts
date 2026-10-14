@@ -1,40 +1,10 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
-const h = vi.hoisted(() => ({ kv: new Map<string, string>(), lists: new Map<string, string[]>() }));
-
-vi.mock('@upstash/redis', () => ({
-  Redis: {
-    fromEnv: () => ({
-      multi: () => {
-        const p = { incr: () => p, expire: () => p, exec: async () => [1, 1] };
-        return p;
-      },
-      set: async (key: string, value: string, opts?: { nx?: boolean }) => {
-        if (opts?.nx && h.kv.has(key)) return null;
-        h.kv.set(key, value);
-        return 'OK';
-      },
-      get: async (key: string) => h.kv.get(key) ?? null,
-      del: async (key: string) => (h.kv.delete(key) ? 1 : 0),
-      eval: async (script: string, keys: string[], args: string[]) => {
-        if (script.includes('LPUSH')) {
-          if (h.kv.has(keys[0])) return 0;
-          h.kv.set(keys[0], args[0]);
-          h.lists.set(keys[1], [args[1], ...(h.lists.get(keys[1]) ?? [])]);
-          return 1;
-        }
-        if (h.kv.get(keys[0]) === args[0]) return h.kv.delete(keys[0]) ? 1 : 0;
-        return 0;
-      },
-    }),
-  },
-}));
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { createFileStore } from '@/lib/file-store';
-import { createMemoryStore, createUpstashStore, type LeadStore, type StoredLead } from '@/lib/store';
+import { createMemoryStore, type LeadStore, type StoredLead } from '@/lib/store';
 
 type Harness = {
   store: LeadStore;
@@ -56,9 +26,8 @@ const lead = (id: string, extra: Partial<StoredLead> = {}): StoredLead => ({
   ...extra,
 });
 
-const makers: Record<string, { timed: boolean; make: () => Harness }> = {
+const makers: Record<string, { make: () => Harness }> = {
   memory: {
-    timed: true,
     make() {
       const clock = { t: 1_000_000 };
       const store = createMemoryStore(() => clock.t);
@@ -66,7 +35,6 @@ const makers: Record<string, { timed: boolean; make: () => Harness }> = {
     },
   },
   file: {
-    timed: true,
     make() {
       const dir = mkdtempSync(join(tmpdir(), 'kvarta-contract-'));
       const clock = { t: 1_000_000 };
@@ -82,18 +50,9 @@ const makers: Record<string, { timed: boolean; make: () => Harness }> = {
       };
     },
   },
-  upstash: {
-    timed: false,
-    make() {
-      h.kv.clear();
-      h.lists.clear();
-      const store = createUpstashStore();
-      return { store, clock: { t: 0 }, count: () => h.lists.get('leads')?.length ?? 0, cleanup() {} };
-    },
-  },
 };
 
-describe.each(Object.entries(makers))('LeadStore contract: %s', (_name, { timed, make }) => {
+describe.each(Object.entries(makers))('LeadStore contract: %s', (_name, { make }) => {
   let ctx: Harness;
   const setup = () => (ctx = make());
   afterEach(() => ctx?.cleanup());
@@ -145,13 +104,9 @@ describe.each(Object.entries(makers))('LeadStore contract: %s', (_name, { timed,
   it('hitRate: counts hits per ip', async () => {
     setup();
     expect(await ctx.store.hitRate('1.1.1.1')).toBe(1);
-    if (timed) {
-      expect(await ctx.store.hitRate('1.1.1.1')).toBe(2);
-      expect(await ctx.store.hitRate('2.2.2.2')).toBe(1);
-    }
+    expect(await ctx.store.hitRate('1.1.1.1')).toBe(2);
+    expect(await ctx.store.hitRate('2.2.2.2')).toBe(1);
   });
-
-  if (!timed) return;
 
   it('claimPhone: same phone is a duplicate within 600 s and free after', async () => {
     setup();

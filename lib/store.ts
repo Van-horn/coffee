@@ -1,5 +1,3 @@
-import { Redis } from '@upstash/redis';
-
 export type StoredLead = {
   leadId: string;
   name: string;
@@ -27,77 +25,11 @@ export interface LeadStore {
 const RATE_WINDOW_SECONDS = 600;
 const NOTIFY_TTL_SECONDS = 604_800;
 
-const SAVE_LEAD_SCRIPT = `
-if redis.call('SET', KEYS[1], ARGV[1], 'NX') then
-  redis.call('LPUSH', KEYS[2], ARGV[2])
-  return 1
-end
-return 0`;
-
-const RELEASE_PHONE_SCRIPT = `
-if redis.call('GET', KEYS[1]) == ARGV[1] then
-  return redis.call('DEL', KEYS[1])
-end
-return 0`;
-
-/** Error label safe for logs: name plus message cut before Upstash's embedded command payload. */
+/** Error label safe for logs: name plus the message cut before any embedded statement or payload. */
 export function safeErrorLabel(error: unknown): string {
   if (!(error instanceof Error)) return 'UnknownError';
-  const cut = error.message.split('command was:')[0].trim();
+  const cut = error.message.split(/command was:|SQL:/)[0].trim();
   return `${error.name}: ${cut}`.slice(0, 200);
-}
-
-export function createUpstashStore(): LeadStore {
-  let redis: Redis | undefined;
-  const client = () => (redis ??= Redis.fromEnv());
-
-  return {
-    async claimPhone(e164, leadId, ttlSeconds) {
-      const key = `phone:${e164}`;
-      const r = client();
-      const set = await r.set(key, leadId, { nx: true, ex: ttlSeconds });
-      if (set === 'OK') return null;
-      const existing = await r.get<string>(key);
-      // The claim may have expired between SET and GET: treat as newly claimed by retrying once.
-      if (existing === null || existing === undefined) {
-        const retry = await r.set(key, leadId, { nx: true, ex: ttlSeconds });
-        if (retry === 'OK') return null;
-        const again = await r.get<string>(key);
-        if (again === null || again === undefined) throw new Error('claim key expired repeatedly');
-        return String(again);
-      }
-      return String(existing);
-    },
-
-    async releasePhone(e164, leadId) {
-      await client().eval(RELEASE_PHONE_SCRIPT, [`phone:${e164}`], [leadId]);
-    },
-
-    async saveLead(lead) {
-      await client().eval(
-        SAVE_LEAD_SCRIPT,
-        [`lead:${lead.leadId}`, 'leads'],
-        [JSON.stringify(lead), lead.leadId],
-      );
-    },
-
-    async claimNotification(leadId) {
-      const set = await client().set(`notify:${leadId}`, '1', { nx: true, ex: NOTIFY_TTL_SECONDS });
-      return set === 'OK';
-    },
-
-    async releaseNotification(leadId) {
-      await client().del(`notify:${leadId}`);
-    },
-
-    async hitRate(ip) {
-      const r = client();
-      const key = `rl:${ip}`;
-      // One atomic request: INCR and EXPIRE NX, so the key can never be left without a TTL.
-      const [count] = await r.multi().incr(key).expire(key, RATE_WINDOW_SECONDS, 'NX').exec<[number, number]>();
-      return count;
-    },
-  };
 }
 
 export type MemoryStore = LeadStore & {

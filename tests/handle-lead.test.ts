@@ -305,7 +305,7 @@ describe('handleLead', () => {
     expect(await store.claimPhone('+375291234567', 'K3', 600)).toBeNull();
   });
 
-  it('never logs personal data from a Redis error message', async () => {
+  it('never logs personal data from a storage error message', async () => {
     const { store, deps } = setup();
     const command =
       'ERR boom, command was: ["EVAL","...","{\\"name\\":\\"Анна\\",\\"phone\\":\\"+375291234567\\"}"]';

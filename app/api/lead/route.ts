@@ -1,12 +1,10 @@
 import { handleLead } from '@/lib/handle-lead';
-import { createUpstashStore, type LeadStore } from '@/lib/store';
+import { getStore } from '@/lib/get-store';
 import { sendTelegram } from '@/lib/telegram';
 
 const MAX_BODY_CHARS = 10_000;
 
 const notifyLead = sendTelegram;
-
-let store: LeadStore | undefined;
 
 function reply(body: unknown, status: number) {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -33,7 +31,7 @@ export async function POST(request: Request) {
 
   const { status, body: result } = await handleLead(
     { body, ip: clientIp(request) },
-    { store: (store ??= createUpstashStore()), notify: notifyLead, now: Date.now },
+    { store: getStore(), notify: notifyLead, now: Date.now },
   );
   return reply(result, status);
 }

@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/store', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/store')>();
-  return { ...actual, createUpstashStore: () => actual.createMemoryStore() };
+vi.mock('@/lib/get-store', async () => {
+  const { createMemoryStore } = await import('@/lib/store');
+  const store = createMemoryStore();
+  return { getStore: () => store };
 });
 
 import { POST } from '@/app/api/lead/route';

@@ -70,3 +70,7 @@ The concept changed after the first implementation. Rulings 3 and 4 above are su
 - Form fields are now: name, phone, interest radios, comment.
 - When a lead is accepted, the bot posts the order into a PRIVATE Telegram channel where only the bot can post (`TELEGRAM_CHAT_ID` is the channel id, for example `-1001234567890`). The channel is staff-only because posts contain the customer's name and phone. Setup: docs/telegram-channel.md.
 - Consent, order section and privacy copy say that name and phone go only to the manager (see components/LeadForm.tsx, components/OrderSection.tsx, app/privacy/page.tsx).
+
+## Addendum: storage
+
+Storage: a single SQLite file on the server (`lib/file-store.ts`, `LEADS_DB_PATH`, default `./data/leads.sqlite`); no third-party databases. This supersedes the Upstash Redis choice in the design spec and plan.

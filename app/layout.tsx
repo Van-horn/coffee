@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Roboto } from 'next/font/google';
 import { AttributionCapture } from '@/components/AttributionCapture';
+import SkipLink from '@/components/SkipLink';
 import { SITE_URL } from '@/lib/site';
 import ThemeRegistry from '@/theme/registry';
 import { colors } from '@/theme/tokens';
@@ -48,10 +49,10 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       className={roboto.variable}
     >
       <body>
-        <a href="#main" className="skip-link">
-          Перейти к содержимому
-        </a>
-        <ThemeRegistry>{children}</ThemeRegistry>
+        <ThemeRegistry>
+          <SkipLink />
+          {children}
+        </ThemeRegistry>
         <AttributionCapture />
       </body>
     </html>

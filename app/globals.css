@@ -1,20 +1,6 @@
-.skip-link {
-  position: absolute;
-  left: 8px;
-  top: 8px;
-  z-index: 2000;
-  padding: 12px 16px;
-  background: #f3ebdd;
-  color: #231a14;
-  font-weight: 500;
-  border-radius: 6px;
-  transform: translateY(-200%);
-}
-
-.skip-link:focus-visible {
-  transform: none;
-  outline: 3px solid #231a14;
-  outline-offset: 2px;
+/* The skip link moves focus to <main>; the container itself shows no ring. */
+main:focus {
+  outline: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {

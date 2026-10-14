@@ -13,7 +13,7 @@ export default function Home() {
   return (
     <>
       <Header />
-      <main id="main" tabIndex={-1} style={{ outline: 'none' }}>
+      <main id="main" tabIndex={-1}>
         <Hero />
         <Week />
         <Range />

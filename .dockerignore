@@ -8,3 +8,4 @@ data
 *.sqlite*
 coverage
 npm-debug.log*
+.superpowers

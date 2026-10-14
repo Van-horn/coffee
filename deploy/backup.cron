@@ -1,6 +1,9 @@
 # /etc/cron.d/kvarta-backup  (path B, bare Node). Daily at 03:15 as the kvarta user, keeps the last 14 backups.
-# Backups hold customer names and phones: keep the backup directory 0700 and copy it off the server.
-15 3 * * * kvarta cd /opt/kvarta && LEADS_DB_PATH=/var/lib/kvarta/leads.sqlite /usr/bin/node scripts/backup-db.mjs --dir /var/backups/kvarta --keep 14 >> /var/log/kvarta-backup.log 2>&1
+# The log lives in the backup directory, which docs/deploy-server.md creates 0700 and owned by kvarta BEFORE
+# the first run (kvarta cannot write to /var/log, a failed redirection would stop the job silently).
+# Backups hold customer names and phones: copy the backup directory off the server.
+# Adjust /usr/bin/node if Node is installed elsewhere (command -v node).
+15 3 * * * kvarta cd /opt/kvarta && LEADS_DB_PATH=/var/lib/kvarta/leads.sqlite /usr/bin/node scripts/backup-db.mjs --dir /var/backups/kvarta --keep 14 >> /var/backups/kvarta/backup.log 2>&1
 
-# Docker (path A): put this in the host's crontab instead (crontab -e), with the volume's backup dir mounted or copied out:
+# Docker (path A): put this in the host's crontab instead (crontab -e):
 # 15 3 * * * cd /srv/kvarta && docker compose exec -T kvarta node scripts/backup-db.mjs --dir /data/backups --keep 14

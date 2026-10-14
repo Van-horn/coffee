@@ -18,6 +18,11 @@ services:
     tmpfs:
       - /tmp
       - /app/.next/cache
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     security_opt:
       - no-new-privileges:true
     cap_drop:

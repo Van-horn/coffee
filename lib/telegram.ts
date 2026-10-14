@@ -227,13 +227,23 @@ export async function sendTelegramMessage(
 
 /** Public-feed post: the interest and the time only, never anything about the customer. */
 export function formatChannelMessage(lead: StoredLead): string {
-  return (
-    `<b>Новая заявка</b> · ${INTEREST_LABELS[lead.interest]}\n` +
-    `Время: ${formatMinskTime(lead.createdAt)} (Минск)`
-  );
+  const label = INTEREST_LABELS[lead.interest] ?? "заявка";
+  const time = Number.isNaN(new Date(lead.createdAt).getTime())
+    ? "время неизвестно"
+    : formatMinskTime(lead.createdAt);
+  return `<b>Новая заявка</b> · ${label}\nВремя: ${time} (Минск)`;
 }
 
 let warnedNoPrivateChat = false;
+let warnedSameId = false;
+
+/** Ids are equal after trimming; "@name" ids compare case-insensitively, numeric ids as numbers. */
+function sameChatId(a: string, b: string): boolean {
+  const x = a.trim();
+  const y = b.trim();
+  if (/^-?\d+$/.test(x) && /^-?\d+$/.test(y)) return BigInt(x) === BigInt(y);
+  return x.toLowerCase() === y.toLowerCase();
+}
 
 /**
  * Delivers a lead: the full message to the private chat (TELEGRAM_CHAT_ID) and an anonymized post
@@ -247,8 +257,8 @@ export async function sendTelegram(
   sleep: (ms: number) => Promise<void> = defaultSleep,
   now: () => number = Date.now,
 ): Promise<void> {
-  const privateChat = process.env.TELEGRAM_CHAT_ID || "";
-  const channel = process.env.TELEGRAM_CHANNEL_ID || "";
+  let privateChat = process.env.TELEGRAM_CHAT_ID?.trim() || "";
+  const channel = process.env.TELEGRAM_CHANNEL_ID?.trim() || "";
   if (!process.env.TELEGRAM_BOT_TOKEN || (!privateChat && !channel)) {
     if (!warnedDisabled) {
       warnedDisabled = true;
@@ -258,7 +268,16 @@ export async function sendTelegram(
     }
     return;
   }
-  if (!privateChat && !warnedNoPrivateChat) {
+  if (privateChat && channel && sameChatId(privateChat, channel)) {
+    // A shared id would publish the full lead in the public channel: keep only the anonymized post.
+    privateChat = "";
+    if (!warnedSameId) {
+      warnedSameId = true;
+      console.warn(
+        "telegram: TELEGRAM_CHAT_ID equals TELEGRAM_CHANNEL_ID: sending only the anonymized post (misconfiguration)",
+      );
+    }
+  } else if (!privateChat && !warnedNoPrivateChat) {
     warnedNoPrivateChat = true;
     console.warn(
       "telegram: TELEGRAM_CHAT_ID not set: order details are not delivered to a private chat",

@@ -9,6 +9,8 @@ Type=simple
 User=kvarta
 Group=kvarta
 WorkingDirectory=/opt/kvarta/.next/standalone
+# /etc/kvarta/env holds TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (private manager chat, full details; may be unset)
+# and TELEGRAM_CHANNEL_ID (public channel, anonymized posts). NEXT_PUBLIC_SITE_URL is BUILD-time, not set here.
 EnvironmentFile=/etc/kvarta/env
 Environment=NODE_ENV=production
 Environment=HOSTNAME=127.0.0.1

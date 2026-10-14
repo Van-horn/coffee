@@ -6,6 +6,7 @@ services:
         # Inlined into the bundle at build time; set it in .env before `docker compose build`.
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?set NEXT_PUBLIC_SITE_URL in .env}
     image: kvarta:latest
+    # .env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (private manager chat), TELEGRAM_CHANNEL_ID (public channel)
     env_file: .env
     environment:
       LEADS_DB_PATH: /data/leads.sqlite

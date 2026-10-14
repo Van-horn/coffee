@@ -34,8 +34,9 @@ do for a throwaway preview. Use a server with a persistent disk.
 
 | Variable | Secret | Notes |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | yes | Bot that posts orders to the private channel. See `docs/telegram-channel.md`. |
-| `TELEGRAM_CHAT_ID` | private | The channel id (for example `-1001234567890`). Without the token and chat id the site still works and saves leads, it just does not notify. |
+| `TELEGRAM_BOT_TOKEN` | yes | Bot token from BotFather. See `docs/telegram-channel.md`. |
+| `TELEGRAM_CHAT_ID` | private | The PRIVATE manager chat: receives the full lead (name, phone, comment). May be unset: then the details are stored only in the database file and nobody is notified of them. |
+| `TELEGRAM_CHANNEL_ID` | private | The PUBLIC channel (for example `-1001234567890`): receives only anonymized posts (interest and time). Never set it equal to `TELEGRAM_CHAT_ID`. |
 | `LEADS_DB_PATH` | no | Database file. Optional: defaults to `./data/leads.sqlite` under the working directory. On a server it is always explicit, and set by `docker-compose.yml` (`/data/leads.sqlite`) or the systemd unit (`/var/lib/kvarta/leads.sqlite`), not in the env file. |
 | `NEXT_PUBLIC_SITE_URL` | no | Public origin, for example `https://kvarta.example`. Needed at **build time**: Next.js inlines `NEXT_PUBLIC_*` values into the bundle (canonical URL, Open Graph, sitemap), so changing it later requires a rebuild. |
 | `PORT`, `HOSTNAME` | no | Standalone server listen address. Keep `HOSTNAME=127.0.0.1` outside Docker so only nginx can reach it. |
@@ -53,7 +54,7 @@ only), so nothing font-related is needed at runtime.
    ```bash
    sudo ufw default deny incoming && sudo ufw allow OpenSSH && sudo ufw allow 80,443/tcp && sudo ufw enable
    ```
-3. nginx and certbot: `sudo apt install nginx certbot python3-certbot-nginx`.
+3. nginx and certbot: `sudo apt install nginx certbot`.
 4. Disk encryption: the file holds customer names and phone numbers. Enable full-disk encryption (LUKS) at provisioning,
    or at least keep the data directory on an encrypted volume.
 
@@ -99,7 +100,7 @@ Prerequisites: Docker Engine with the compose plugin.
 ```bash
 git clone <repo> /srv/kvarta && cd /srv/kvarta
 cp .env.example .env && chmod 600 .env
-# edit .env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, NEXT_PUBLIC_SITE_URL=https://your.domain
+# edit .env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_CHANNEL_ID, NEXT_PUBLIC_SITE_URL=https://your.domain
 docker compose up -d --build
 docker compose ps            # STATUS should become "healthy"
 curl -sI http://127.0.0.1:3000/ | head -1
@@ -131,7 +132,7 @@ sudo git clone <repo> /opt/kvarta && sudo chown -R kvarta:kvarta /opt/kvarta
 sudo -u kvarta sh -c 'cd /opt/kvarta && npm ci --ignore-scripts --cache /tmp/npm-cache'
 
 sudo install -m 0640 -o root -g kvarta /dev/null /etc/kvarta/env
-# Only secrets go here (TELEGRAM_BOT_TOKEN=..., TELEGRAM_CHAT_ID=...). Do NOT put LEADS_DB_PATH in this file:
+# Only secrets go here (TELEGRAM_BOT_TOKEN=..., TELEGRAM_CHAT_ID=..., TELEGRAM_CHANNEL_ID=...). Do NOT put LEADS_DB_PATH in this file:
 # the unit sets it, and an empty or different value in the EnvironmentFile would override the unit.
 sudoedit /etc/kvarta/env
 
@@ -233,7 +234,7 @@ so spreadsheets do not run them as formulas (phones therefore appear as `'+375..
   asked to retry or call). Free space (`journalctl --vacuum-size=200M`, `docker system prune`, remove old backups),
   and the service recovers on its own. Take a backup first. Watch free space with your provider's monitoring.
 - **Database cannot be opened** (permissions, corrupt file): the app logs `lead store: cannot open the file database`
-  once and answers 503; fix the cause, then restart. Restore from a backup if the file is corrupt.
+  and answers 503; fix the cause. The app retries opening the file by itself after about 30 s, so a restart is not required. Restore from a backup if the file is corrupt.
 - **Several processes:** pm2 cluster or two containers on one volume are safe, all writes are `BEGIN IMMEDIATE`
   transactions with a 5 s busy timeout. The volume must be a local disk, not NFS. Database calls are
   synchronous: while a writer waits on a lock (`SQLITE_BUSY`, up to 5 s) that Node process serves no other request.

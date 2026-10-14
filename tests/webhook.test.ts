@@ -269,3 +269,95 @@ describe('webhook logging', () => {
     expect(out).toContain('webhook');
   });
 });
+
+describe('webhook hardening (fix round 1)', () => {
+  it('rejects by content-length before reading the body', async () => {
+    const lead = await seed();
+    const res = await POST(
+      new Request('http://localhost/api/telegram/webhook', {
+        method: 'POST',
+        headers: { 'x-telegram-bot-api-secret-token': SECRET, 'content-length': '20001' },
+        body: JSON.stringify(startUpdate(`/start ${lead.leadId}`)),
+      }),
+    );
+    expect(res.status).toBe(413);
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it('caps an endless body without content-length while reading it', async () => {
+    let pulls = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        controller.enqueue(new TextEncoder().encode('x'.repeat(1000)));
+      },
+    });
+    const res = await POST(
+      new Request('http://localhost/api/telegram/webhook', {
+        method: 'POST',
+        headers: { 'x-telegram-bot-api-secret-token': SECRET },
+        body: stream,
+        duplex: 'half',
+      } as RequestInit),
+    );
+    expect(res.status).toBe(413);
+    expect(pulls).toBeLessThan(100);
+  });
+
+  it('ignores a /start sent by a bot account', async () => {
+    const lead = await seed();
+    const update = startUpdate(`/start ${lead.leadId}`);
+    (update.message as Record<string, unknown>).from = { id: 5, is_bot: true, first_name: 'x' };
+    expect((await call(update)).status).toBe(200);
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it('ignores a forwarded message', async () => {
+    const lead = await seed();
+    const update = startUpdate(`/start ${lead.leadId}`);
+    (update.message as Record<string, unknown>).forward_origin = { type: 'user', date: 1 };
+    expect((await call(update)).status).toBe(200);
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing when the stored lead id differs from the requested one', async () => {
+    const lead = await seed();
+    const spy = vi.spyOn(h.store!, 'getLead').mockResolvedValueOnce({ ...lead, leadId: 'some-other-lead-id' });
+    expect((await call(startUpdate(`/start ${lead.leadId}`))).status).toBe(200);
+    expect(h.send).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('claims and releases the marker by the requested id', async () => {
+    const lead = await seed();
+    const claim = vi.spyOn(h.store!, 'claimBotGreeting');
+    const release = vi.spyOn(h.store!, 'releaseBotGreeting');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    h.send.mockRejectedValueOnce(new Error('telegram send failed: 500'));
+    await call(startUpdate(`/start ${lead.leadId}`));
+    expect(claim).toHaveBeenCalledWith(lead.leadId);
+    expect(release).toHaveBeenCalledWith(lead.leadId);
+  });
+
+  it('never logs the lead id during webhook failures', async () => {
+    const getLogs = logs();
+    const lead = await seed({ leadId: 'LEAD-SECRET-ID-1234' });
+    // 1) send fails
+    h.send.mockRejectedValueOnce(new Error('telegram send failed: 500'));
+    await call(startUpdate(`/start ${lead.leadId}`));
+    // 2) the store throws with the command payload embedded in the message
+    const getSpy = vi
+      .spyOn(h.store!, 'getLead')
+      .mockRejectedValueOnce(new Error('down, command was: ["GET","lead:LEAD-SECRET-ID-1234"]'));
+    await call(startUpdate(`/start ${lead.leadId}`));
+    getSpy.mockRestore();
+    // 3) send fails and the release fails too
+    const relSpy = vi.spyOn(h.store!, 'releaseBotGreeting').mockRejectedValueOnce(new Error('redis down'));
+    h.send.mockRejectedValueOnce(new Error('telegram send failed: 500'));
+    await call(startUpdate(`/start ${lead.leadId}`));
+    relSpy.mockRestore();
+    const out = getLogs();
+    expect(out).toContain('telegram webhook');
+    expect(out).not.toContain('LEAD-SECRET-ID-1234');
+  });
+});

@@ -1,75 +1,106 @@
-# Telegram channel for orders
+# Telegram notifications for orders
 
-When a lead is accepted, the bot posts the order into a Telegram **channel** that only the bot can write to. Staff read the orders there. The customer is never messaged and the site has no customer-facing bot, so no webhook is needed.
+When a lead is accepted, the bot sends two messages, to two different places:
 
-## The channel MUST be private
+| Target | Variable | Audience | Content |
+| --- | --- | --- | --- |
+| Private manager chat | `TELEGRAM_CHAT_ID` | the manager only | the full lead: name, phone, comment, source tags, landing page, time, lead id |
+| Public channel feed | `TELEGRAM_CHANNEL_ID` | anyone with the invite link | an anonymized post: only "New order" + interest + time |
 
-Every order post contains the customer's **name and phone number**. Never make the channel public, never give it a `t.me/<name>` link, and never share an invite link outside the staff. A public channel (`@channelusername`) would publish customer phone numbers to the whole internet and search engines.
+The customer is never messaged and the site has no customer-facing bot, so no webhook is needed.
+
+## Why the channel is a public anonymized feed
+
+The channel's invite link (`https://t.me/+<code>`) is shown on the site (footer and the "order accepted" screen), so the channel is effectively **public**: anyone can join and read it. For that reason the channel NEVER receives names, phone numbers, comments, attribution data or lead ids. A channel post looks like this and contains nothing else:
+
+```
+Новая заявка · подписка
+Время: 15.10.2026 01:30 (Минск)
+```
+
+All personal details go only to the private chat (`TELEGRAM_CHAT_ID`). Never point `TELEGRAM_CHAT_ID` at the public channel.
 
 ## 1. Create the bot (BotFather)
 
 1. Open [@BotFather](https://t.me/BotFather) and send `/newbot`.
-2. Pick a display name and a username ending in `bot` (for example `kvarta_orders_bot`).
+2. Pick a display name and a username ending in `bot`.
 3. Copy the token BotFather returns. Treat it as a secret; never commit it.
 4. Optional: `/setjoingroups` -> Disable (nobody can add the bot to other groups).
 
-## 2. Create the private channel
+## 2. The public channel (TELEGRAM_CHANNEL_ID)
 
-1. In Telegram: New Channel, give it a name (for example "Заявки Кварта").
-2. Choose **Private** (not Public). Do not set a public link.
-3. Open the channel -> Administrators -> Add Administrator -> find your bot.
-4. Enable ONLY **Post messages**; switch every other permission off. Save.
+1. In Telegram: New Channel, give it a name.
+2. Open the channel -> Administrators -> Add Administrator -> find your bot.
+3. Enable ONLY **Post messages**; switch every other permission off. Save.
+4. Only administrators can post in a channel, so subscribers can only read.
 
-Only administrators can post in a channel; subscribers can only read. So only the bot (and you, as the owner) can write.
+**The invite link is not a chat id.** The link `https://t.me/+<code>` can be shown on the site (it is `CONTACT.telegramChannelUrl` in `lib/contact.ts`), but the Bot API cannot use it as `chat_id`. Get the real id:
 
-## 3. Get the channel id
-
-1. Post any message in the channel (as the owner), or add the bot and post once.
+1. Post any message in the channel (or remove and re-add the bot as admin).
 2. Open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser.
-3. Find `channel_post.chat.id`. It is a negative number starting with `-100`, for example `-1001234567890`.
+3. Find `my_chat_member.chat.id` (when the bot was added) or `channel_post.chat.id` (after a post). It is a negative number starting with `-100`, for example `-1001234567890`. That is `TELEGRAM_CHANNEL_ID`.
 
-If `getUpdates` is empty, post another message and reload. (Public channels can also be addressed as `@channelusername`, but do NOT use a public channel, see above.)
+If `getUpdates` is empty, post another message and reload.
+
+## 3. The private manager chat (TELEGRAM_CHAT_ID)
+
+Option A, a direct chat (simplest): the manager opens the bot in Telegram and presses **Start** (a bot cannot write first). Then open `getUpdates` and find `message.chat.id`: a positive number, for example `555000111`. That is `TELEGRAM_CHAT_ID`.
+
+Option B, a private group with the bot: create a group, add the bot and the managers, write a message, and take `message.chat.id` from `getUpdates` (a negative number). Keep the group private.
 
 ## 4. Environment variables
 
 | Name | Value |
 | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | the token from BotFather |
-| `TELEGRAM_CHAT_ID` | the channel id, for example `-1001234567890` |
+| `TELEGRAM_CHAT_ID` | private manager chat id (positive number, or negative for a private group) |
+| `TELEGRAM_CHANNEL_ID` | public channel id, starts with `-100` |
 
-Set both in Vercel (Project -> Settings -> Environment Variables, Production) and in `.env.local` for local runs, then redeploy. If either is missing, notifications are skipped with one warning in the logs and the lead is still saved.
+Set them in Vercel (Project -> Settings -> Environment Variables, Production) and in `.env.local` for local runs, then redeploy. The site works without any of them: leads are still saved, and notifications are skipped with one warning in the logs. If only the token and `TELEGRAM_CHANNEL_ID` are set, the channel post is sent and the logs carry one warning that order details are not delivered to a private chat.
+
+Delivery rules: both messages are sent in parallel within one 4-second budget. If the private message fails, the request fails and the lead can be retried (the channel may then get a duplicate anonymized post). If only the channel post fails, it is logged and ignored. If the channel is the only target and fails, the request fails.
 
 ## 5. Test
+
+Private chat (full details go only here):
+
+```bash
+curl -s "https://api.telegram.org/bot<TOKEN>/sendMessage" \
+  -d chat_id=<PRIVATE_CHAT_ID> \
+  -d text="Private test from the Kvarta bot"
+```
+
+Public channel (never send personal data):
 
 ```bash
 curl -s "https://api.telegram.org/bot<TOKEN>/sendMessage" \
   -d chat_id=<CHANNEL_ID> \
-  -d text="Test from the Kvarta bot"
+  -d text="Channel test from the Kvarta bot"
 ```
 
-Expect `"ok":true` and the message in the channel. Then submit the form on the site (a real-looking phone, wait a few seconds before sending) and check the order post: type, name, phone, comment, source tags, landing page, time and lead id.
+Expect `"ok":true` and the message in the right place. Then submit the form on the site (a real-looking phone, wait a few seconds before sending): the manager chat gets the full order, the channel gets the two-line anonymized post.
 
 ## Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `403 Forbidden` (bot is not a member / can't post) | The bot is not an administrator of the channel, or lacks "Post messages". Re-add it as an administrator. |
-| `400 Bad Request: chat not found` | Wrong `TELEGRAM_CHAT_ID`: it must be the channel id with the `-100` prefix, or the bot was never added to the channel. |
+| `403 Forbidden` for the channel | The bot is not an administrator of the channel, or lacks "Post messages". Re-add it as an administrator. |
+| `403 Forbidden` for the private chat | The manager never pressed Start, or blocked the bot. Ask them to open the bot and press Start. |
+| `400 Bad Request: chat not found` | Wrong id. The channel id must start with `-100`; the invite link is not an id. For a direct chat the manager must have pressed Start. |
 | `401 Unauthorized` | Wrong or revoked token. Check `TELEGRAM_BOT_TOKEN`; regenerate with BotFather `/revoke` if needed. |
-| Nothing arrives, no error | Variables not set in the deployed environment (see the single "notifications disabled" warning in the logs), or not redeployed after setting them. |
+| Channel post arrives, no manager message | `TELEGRAM_CHAT_ID` is not set (see the one-time warning in the logs). |
+| Nothing arrives, no error | Variables not set in the deployed environment, or not redeployed after setting them. |
 
-Delivery failures are logged without the token, chat id or customer data (for example `telegram send failed: 403 Forbidden`).
+Delivery failures are logged without the token, chat ids or customer data (for example `telegram send failed: 403 Forbidden`).
 
-## Staff access and keeping it private
+## Access and invite link
 
-- Add a staff member: channel -> Subscribers -> Add Subscriber (by contact), or share the channel's **invite link** with them personally.
-- Never post the invite link on the site, social media or in public chats. If it leaks, revoke it (channel -> Invite Links -> Revoke) and create a new one.
-- Remove people who leave: channel -> Subscribers -> remove.
-- Do not make anyone but the bot an administrator unless they need to manage the channel.
-- Do not enable "Forwarding" for others if you want to limit copying: channel -> Manage -> Restrict saving content.
+- The channel invite link is public by design; it may be shown on the site. Do not put anything private in the channel.
+- If the link is abused, revoke it (channel -> Invite Links -> Revoke), create a new one and update `CONTACT.telegramChannelUrl`.
+- Keep the manager chat private; add only people who need customer phone numbers.
 
 ## Rotating the bot token
 
 1. BotFather -> `/revoke` -> pick the bot; copy the new token.
 2. Update `TELEGRAM_BOT_TOKEN` in Vercel and `.env.local`, then redeploy.
-3. The old token stops working immediately; orders submitted before the redeploy finishes are not posted to the channel (they are still saved), so rotate at a quiet time.
+3. The old token stops working immediately; orders submitted before the redeploy finishes are not posted (they are still saved), so rotate at a quiet time.

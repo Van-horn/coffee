@@ -40,7 +40,9 @@ async function submit(fetchMock: ReturnType<typeof vi.fn>) {
 
 describe('LeadForm Telegram bot box', () => {
   it('links to the bot with the idempotency key as the start payload', async () => {
-    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(response({ ok: true, leadId: 'L1' })));
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: { body: string }) =>
+      Promise.resolve(response({ ok: true, leadId: JSON.parse(init.body).idempotencyKey })),
+    );
     await submit(fetchMock);
     const key = JSON.parse(fetchMock.mock.calls[0][1].body).idempotencyKey as string;
     const link = screen.getByRole('link', { name: /Открыть бота в Telegram/ });
@@ -56,15 +58,27 @@ describe('LeadForm Telegram bot box', () => {
     ).toBeInTheDocument();
   });
 
-  it('uses the stored lead id from a duplicate answer when it is a valid start payload', async () => {
+  it('hides the box for a duplicate answer naming a foreign lead id, and never links to it', async () => {
     const fetchMock = vi
       .fn()
       .mockImplementation(() => Promise.resolve(response({ ok: true, leadId: 'existing-lead-01', duplicate: true })));
     await submit(fetchMock);
-    expect(screen.getByRole('link', { name: /Открыть бота/ })).toHaveAttribute(
-      'href',
-      'https://t.me/kvarta_bot?start=existing-lead-01',
+    expect(screen.queryByRole('link', { name: /Открыть бота/ })).toBeNull();
+    expect(screen.queryByText('Подтверждение в Telegram')).toBeNull();
+    expect(document.body.innerHTML).not.toContain('existing-lead-01');
+  });
+
+  it('hides the box for a duplicate answer even when its id equals our key (conservative)', async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: { body: string }) =>
+      Promise.resolve(response({ ok: true, leadId: JSON.parse(init.body).idempotencyKey, duplicate: true })),
     );
+    await submit(fetchMock);
+    expect(screen.queryByRole('link', { name: /Открыть бота/ })).toBeNull();
+  });
+
+  it('hides the box when a non-duplicate answer names an id other than our key', async () => {
+    await submit(vi.fn().mockImplementation(() => Promise.resolve(response({ ok: true, leadId: 'other-lead-0002' }))));
+    expect(screen.queryByRole('link', { name: /Открыть бота/ })).toBeNull();
   });
 
   it('keeps the optional nick hint', async () => {

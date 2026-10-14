@@ -21,6 +21,7 @@ import {
   validateLeadFields,
   type FormValues,
 } from '@/lib/lead-client';
+import { parseBotUsername } from '@/lib/bot-username';
 import { formatPhoneMask } from '@/lib/phone';
 import { colors, radius } from '@/theme/tokens';
 
@@ -34,10 +35,7 @@ const HONEYPOT_NAME = 'hp_field_x7';
 
 // Read as a module constant so Next inlines it at build time; empty (or not a valid bot username)
 // hides the whole Telegram confirmation box.
-const BOT_USERNAME = (() => {
-  const raw = (process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? '').trim().replace(/^@/, '');
-  return /^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(raw) ? raw : '';
-})();
+const BOT_USERNAME = parseBotUsername(process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME);
 
 // An idempotency key is bound to the content it was first sent with (fingerprint).
 interface KeyRecord {
@@ -186,7 +184,7 @@ export default function LeadForm() {
   const [failMessage, setFailMessage] = useState('');
   const [extraMessages, setExtraMessages] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
-  const [done, setDone] = useState<{ phone: string; telegram: string; leadId: string } | null>(null);
+  const [done, setDone] = useState<{ phone: string; telegram: string; leadId: string | null } | null>(null);
 
   const inFlight = useRef(false);
   const renderedAt = useRef(0);
@@ -298,9 +296,10 @@ export default function LeadForm() {
       if (result.kind === 'ok') {
         keyRef.current = null;
         storeKey(null);
-        // A duplicate answer names the lead that is actually stored; otherwise it is our own key.
-        const startId = IDEM_RE.test(result.leadId) ? result.leadId : record.key;
-        setDone({ phone: formatPhoneMask(values.phone), telegram: payload.telegram, leadId: startId });
+        // The start link only ever carries this request's own key. A duplicate (or any answer that
+        // names another id) hides the bot box: that lead belongs to someone else.
+        const botKey = !result.duplicate && result.leadId === record.key && IDEM_RE.test(record.key) ? record.key : null;
+        setDone({ phone: formatPhoneMask(values.phone), telegram: payload.telegram, leadId: botKey });
         setErrors({});
         setAttempted(false);
         setStatus('success');
@@ -406,7 +405,7 @@ export default function LeadForm() {
             {HOURS_NOTE}
           </Typography>
         </Box>
-        {BOT_USERNAME ? (
+        {BOT_USERNAME && done.leadId ? (
           <Box
             data-testid="bot-box"
             sx={{ bgcolor: colors.paper2, color: colors.ink2, borderRadius: `${radius.md}px`, p: 2, mt: 2 }}
@@ -419,12 +418,12 @@ export default function LeadForm() {
             </Typography>
           </Box>
         ) : null}
-        {BOT_USERNAME ? (
+        {BOT_USERNAME && done.leadId ? (
           <Button
             component="a"
             variant="contained"
             fullWidth
-            href={`https://t.me/${BOT_USERNAME}?start=${done.leadId}`}
+            href={`https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(done.leadId)}`}
             target="_blank"
             rel="noopener noreferrer"
             sx={{ mt: 2, height: 56, fontSize: 16, fontWeight: 500, '&:focus-visible': focusRing }}

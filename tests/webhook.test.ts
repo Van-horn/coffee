@@ -146,7 +146,7 @@ describe('webhook /start flow', () => {
     const [chat, text] = h.send.mock.calls[0];
     expect(chat).toBe(CHAT_ID);
     expect(text).toContain('Анна');
-    expect(text).toContain('+375 29 123-45-67');
+    expect(text).toContain('+375 29 ***-**-67');
   });
 
   it('accepts the /start@botname form', async () => {

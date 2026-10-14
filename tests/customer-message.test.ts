@@ -22,7 +22,7 @@ describe('formatCustomerMessage', () => {
     expect(formatCustomerMessage(lead(), OPEN)).toBe(
       [
         'Привет, Анна! Заявка принята: подписка (2 пачки по 250 г).',
-        'Менеджер позвонит на +375 29 123-45-67 в рабочее время: пн–пт 08:00–20:00, сб–вс 10:00–18:00.',
+        'Менеджер позвонит на +375 29 ***-**-67 в рабочее время: пн–пт 08:00–20:00, сб–вс 10:00–18:00.',
         'Ближайшая обжарка — четверг, 15 октября · заявки до среды, 20:00.',
         'Это единственное сообщение: бот больше ничего не пришлёт.',
       ].join('\n'),
@@ -38,6 +38,12 @@ describe('formatCustomerMessage', () => {
     expect(formatCustomerMessage(lead(), CLOSED)).toContain(
       'Ближайшая обжарка — четверг, 15 октября, заявки закрыты · следующая 22 октября.',
     );
+  });
+
+  it('masks all but the operator code and the last two digits of the phone', () => {
+    const text = formatCustomerMessage(lead({ phone: '+375441112233' }), OPEN);
+    expect(text).toContain('+375 44 ***-**-33');
+    expect(text).not.toMatch(/111|122|1112233/);
   });
 
   it('escapes the name', () => {

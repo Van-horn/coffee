@@ -18,7 +18,7 @@ export default function BagIllustration({ dateSlot }: BagIllustrationProps) {
     <Box
       sx={{
         width: '100%',
-        maxWidth: { xs: 350, sm: 462, md: wide(469, 0.35, 760) },
+        maxWidth: { xs: 350, sm: 462, md: wide(469, 0.5, 900) },
         mx: { xs: 'auto', md: 0 },
         aspectRatio: '1 / 1',
         lineHeight: 0,

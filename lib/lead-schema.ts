@@ -4,7 +4,6 @@ import { normalizeBelarusPhone } from '@/lib/phone';
 export type LeadInput = {
   name: string;
   phone: string; // E.164
-  telegram: string; // '' when not given, otherwise nick without '@'
   interest: 'subscription' | 'order' | 'question';
   comment: string;
   idempotencyKey: string;
@@ -15,12 +14,10 @@ export type LeadInput = {
 
 const NAME_MSG = 'Укажите имя: от 2 до 60 символов';
 const PHONE_MSG = 'Проверьте номер: нужен белорусский, например +375 29 123-45-67';
-const TELEGRAM_MSG = 'Ник: от 5 символов, латиница, цифры и _, например @anna_minsk';
 const INTEREST_MSG = 'Выберите, что вас интересует';
 const COMMENT_MSG = 'Комментарий не длиннее 500 символов';
 const KEY_MSG = 'Некорректный идентификатор заявки';
 
-const TELEGRAM_RE = /^@?[A-Za-z][A-Za-z0-9_]{4,31}$/;
 const KEY_RE = /^[A-Za-z0-9_-]+$/;
 
 const ATTRIBUTION_KEYS = [
@@ -47,19 +44,6 @@ const phoneSchema = z.string({ error: PHONE_MSG }).transform((value, ctx) => {
   return phone;
 });
 
-const telegramSchema = z
-  .string({ error: TELEGRAM_MSG })
-  .trim()
-  .optional()
-  .transform((value, ctx) => {
-    if (!value) return '';
-    if (!TELEGRAM_RE.test(value)) {
-      ctx.addIssue({ code: 'custom', message: TELEGRAM_MSG });
-      return z.NEVER;
-    }
-    return value.replace(/^@/, '');
-  });
-
 const attributionSchema = z.unknown().optional().transform((value): Record<string, string> => {
   const out: Record<string, string> = {};
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return out;
@@ -75,7 +59,6 @@ const attributionSchema = z.unknown().optional().transform((value): Record<strin
 export const leadSchema = z.object({
   name: z.string({ error: NAME_MSG }).trim().min(2, NAME_MSG).max(60, NAME_MSG),
   phone: phoneSchema,
-  telegram: telegramSchema,
   interest: z.enum(['subscription', 'order', 'question'], { error: INTEREST_MSG }),
   comment: z
     .string({ error: COMMENT_MSG })

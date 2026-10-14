@@ -72,7 +72,6 @@ export async function handleLead(
     leadId: lead.idempotencyKey,
     name: lead.name,
     phone: lead.phone,
-    telegram: lead.telegram,
     interest: lead.interest,
     comment: lead.comment,
     attribution: lead.attribution,

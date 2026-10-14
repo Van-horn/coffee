@@ -15,7 +15,6 @@ const lead = (over: Partial<StoredLead> = {}): StoredLead => ({
   leadId: "lead-1",
   name: "Анна Секретова",
   phone: "+375291234567",
-  telegram: "",
   interest: "subscription",
   comment: "Хочу зерно",
   attribution: {},
@@ -146,11 +145,12 @@ describe("formatLeadMessage", () => {
     expect(msg).toContain("Пришёл с: https://ya.ru/");
   });
 
-  it("renders the customer nick as a link only when present", () => {
-    expect(formatLeadMessage(lead({ telegram: "anna_minsk" }))).toContain(
-      'Telegram клиента: <a href="https://t.me/anna_minsk">@anna_minsk</a>',
-    );
-    expect(formatLeadMessage(lead())).not.toContain("Telegram клиента");
+  it("has no customer Telegram line and never prints undefined", () => {
+    const msg = formatLeadMessage(lead());
+    expect(msg).not.toContain("Telegram");
+    expect(msg).not.toContain("t.me");
+    expect(msg).not.toMatch(/undefined|null/);
+    expect(msg).toContain("Телефон: +375291234567");
   });
 
   it("omits empty values and never prints undefined/null", () => {
@@ -185,12 +185,11 @@ describe("formatLeadMessage", () => {
       lead({
         comment: "<".repeat(500),
         name: "&".repeat(100),
-        telegram: "a".repeat(32),
         attribution,
       }),
     );
     expect(msg.length).toBeLessThanOrEqual(3800);
-    expect(msg.length).toBeGreaterThan(3790);
+    expect(msg.length).toBeGreaterThan(3740);
     expect(msg).not.toMatch(/&(?!(amp|lt|gt|quot|#39);)/);
     expect(msg.match(/<b>/g)?.length).toBe(msg.match(/<\/b>/g)?.length);
     expect(msg.match(/<a /g)?.length).toBe(msg.match(/<\/a>/g)?.length);
@@ -216,7 +215,7 @@ describe("sendTelegram", () => {
     spies
       .map((s) => inspect(s.mock.calls, { showHidden: true, depth: 10 }))
       .join("\n");
-  const full = lead({ telegram: "anna_minsk" });
+  const full = lead();
 
   beforeEach(() => {
     vi.resetModules();
@@ -459,6 +458,31 @@ describe("sendTelegramMessage", () => {
       disable_web_page_preview: true,
     });
   });
+
+  it.each(["-1001234567890", "@kvarta_orders"])(
+    "sends the channel id %s unchanged as chat_id",
+    async (channel) => {
+      vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
+      const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      await sendTelegramMessage(channel, "hi");
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).chat_id).toBe(channel);
+    },
+  );
+
+  it.each(["-1001234567890", "@kvarta_orders"])(
+    "sendTelegram posts the order to the channel %s from TELEGRAM_CHAT_ID",
+    async (channel) => {
+      vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
+      vi.stubEnv("TELEGRAM_CHAT_ID", channel);
+      const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      await sendTelegram(lead());
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.chat_id).toBe(channel);
+      expect(body.text).toContain("Новая заявка");
+    },
+  );
 
   it("throws a token-free error when the token is missing", async () => {
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "");

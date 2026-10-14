@@ -13,7 +13,6 @@ import {
 const base: FormValues = {
   name: 'Анна',
   phone: '+375 29 123-45-67',
-  telegram: '',
   interest: 'subscription',
   comment: '',
 };
@@ -45,13 +44,6 @@ describe('validateLeadFields parity with the server parseLead', () => {
     ['landline', { phone: '+375 17 123-45-67' }],
     ['letters', { phone: 'abc' }],
     ['empty phone', { phone: '' }],
-    ['nick anna (short)', { telegram: 'anna' }],
-    ['nick @anna_minsk', { telegram: '@anna_minsk' }],
-    ['nick @@x', { telegram: '@@x' }],
-    ['nick 1anna_', { telegram: '1anna_' }],
-    ['nick padded', { telegram: '  @anna_minsk  ' }],
-    ['nick 32 chars', { telegram: 'a' + 'b'.repeat(31) }],
-    ['nick 33 chars', { telegram: 'a' + 'b'.repeat(32) }],
     ['comment 500', { comment: 'x'.repeat(500) }],
     ['comment 501', { comment: 'x'.repeat(501) }],
     ['comment 500 + trailing spaces', { comment: 'x'.repeat(500) + '   ' }],
@@ -59,7 +51,7 @@ describe('validateLeadFields parity with the server parseLead', () => {
     ['interest question', { interest: 'question' }],
     ['bad interest', { interest: 'bogus' }],
     ['empty interest', { interest: '' }],
-    ['everything wrong', { name: '', phone: '1', telegram: 'x', interest: 'z', comment: 'y'.repeat(501) }],
+    ['everything wrong', { name: '', phone: '1', interest: 'z', comment: 'y'.repeat(501) }],
   ];
 
   it.each(cases)('%s', (_label, patch) => {
@@ -77,15 +69,17 @@ describe('buildPayload', () => {
     now: 5000,
   };
 
-  it('trims, normalizes the phone, strips @ and adds submittedAt', () => {
+  it('trims, normalizes the phone, adds submittedAt', () => {
     const payload = buildPayload(
-      { ...base, name: '  Анна ', telegram: ' @anna_minsk ', comment: ' hi ', phone: '80291234567' },
+      { ...base, name: '  Анна ', comment: ' hi ', phone: '80291234567' },
       ctx,
+    );
+    expect(Object.keys(payload).sort()).toEqual(
+      ['attribution', 'comment', 'idempotencyKey', 'interest', 'name', 'phone', 'renderedAt', 'website'],
     );
     expect(payload).toEqual({
       name: 'Анна',
       phone: '+375291234567',
-      telegram: 'anna_minsk',
       interest: 'subscription',
       comment: 'hi',
       idempotencyKey: 'key-12345678',

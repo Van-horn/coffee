@@ -12,7 +12,6 @@ export function isInterest(value: unknown): value is Interest {
 export interface FormValues {
   name: string;
   phone: string;
-  telegram: string;
   interest: string;
   comment: string;
 }
@@ -20,7 +19,6 @@ export interface FormValues {
 export interface LeadPayload {
   name: string;
   phone: string;
-  telegram: string;
   interest: string;
   comment: string;
   idempotencyKey: string;
@@ -47,18 +45,14 @@ export const GENERIC_FAILURE = 'Не удалось отправить заяв�
 
 const NAME_MSG = 'Укажите имя: от 2 до 60 символов';
 const PHONE_MSG = 'Проверьте номер: нужен белорусский, например +375 29 123-45-67';
-const TELEGRAM_MSG = 'Ник: от 5 символов, латиница, цифры и _, например @anna_minsk';
 const INTEREST_MSG = 'Выберите, что вас интересует';
 const COMMENT_MSG = 'Комментарий не длиннее 500 символов';
-const TELEGRAM_RE = /^@?[A-Za-z][A-Za-z0-9_]{4,31}$/;
 
 export function validateLeadFields(values: FormValues): Record<string, string> {
   const errors: Record<string, string> = {};
   const name = values.name.trim();
   if (name.length < 2 || name.length > 60) errors.name = NAME_MSG;
   if (normalizeBelarusPhone(values.phone) === null) errors.phone = PHONE_MSG;
-  const telegram = values.telegram.trim();
-  if (telegram && !TELEGRAM_RE.test(telegram)) errors.telegram = TELEGRAM_MSG;
   if (!isInterest(values.interest)) errors.interest = INTEREST_MSG;
   if (values.comment.trim().length > 500) errors.comment = COMMENT_MSG;
   return errors;
@@ -69,7 +63,6 @@ export function buildPayload(values: FormValues, ctx: PayloadContext): LeadPaylo
   return {
     name: values.name.trim(),
     phone: normalizeBelarusPhone(phone) ?? phone,
-    telegram: values.telegram.trim().replace(/^@/, ''),
     interest: values.interest,
     comment: values.comment.trim(),
     idempotencyKey: ctx.idempotencyKey,
@@ -81,7 +74,7 @@ export function buildPayload(values: FormValues, ctx: PayloadContext): LeadPaylo
 
 /** Identity of what the lead says: the idempotency key is only reusable while this stays the same. */
 export function leadFingerprint(payload: LeadPayload): string {
-  return JSON.stringify([payload.name, payload.phone, payload.telegram, payload.interest, payload.comment]);
+  return JSON.stringify([payload.name, payload.phone, payload.interest, payload.comment]);
 }
 
 /** Russian plural form: plural(1, 'поле', 'поля', 'полей') -> 'поле'. */

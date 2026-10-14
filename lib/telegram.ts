@@ -60,15 +60,11 @@ function render(lead: StoredLead, commentMax: number, attrMax: number): string {
     .filter(([, value]) => value)
     .map(([key, value]) => `${key}=${escapeHtml(value)}`)
     .join(", ");
-  const nick = lead.telegram
-    ? `Telegram клиента: <a href="https://t.me/${escapeHtml(lead.telegram)}">@${escapeHtml(lead.telegram)}</a>`
-    : null;
 
   const lines = [
     `<b>Новая заявка</b> · ${INTEREST_LABELS[lead.interest]}`,
     line("Имя", lead.name),
     `Телефон: ${lead.phone}`,
-    nick,
     line("Комментарий", clip(lead.comment, commentMax)),
     source ? `Источник: ${source}` : null,
     line("Кампания", attr("utm_campaign")),
@@ -230,7 +226,7 @@ export async function sendTelegramMessage(
 }
 
 /**
- * Forwards a lead to the manager's Telegram chat; THROWS when delivery ultimately fails so the
+ * Posts a lead into the private orders channel (TELEGRAM_CHAT_ID: channel id or @name); THROWS when delivery ultimately fails so the
  * caller can release its marker. A no-op (one warning) when the token or chat id is missing.
  */
 export async function sendTelegram(

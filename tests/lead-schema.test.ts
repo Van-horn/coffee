@@ -23,7 +23,6 @@ describe('parseLead', () => {
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.data.phone).toBe('+375291234567');
-      expect(r.data.telegram).toBe('');
       expect(r.data.attribution).toEqual({});
       expect(r.data.comment).toBe('');
     }
@@ -62,20 +61,12 @@ describe('parseLead', () => {
     );
   });
 
-  it('telegram rules', () => {
-    const ok = (telegram: unknown) => {
-      const r = parseLead({ ...valid, telegram });
-      return r.ok ? r.data.telegram : null;
-    };
-    expect(ok('')).toBe('');
-    expect(ok(undefined)).toBe('');
-    expect(ok('@anna_minsk')).toBe('anna_minsk');
-    expect(ok('anna_minsk')).toBe('anna_minsk');
-    for (const bad of ['anna', 'ann a', '1anna', '@@anna_minsk']) {
-      expect(errorsOf({ telegram: bad }).telegram).toBe(
-        'Ник: от 5 символов, латиница, цифры и _, например @anna_minsk',
-      );
-    }
+  it('ignores a telegram key sent by an old client', () => {
+    const r = parseLead({ ...valid, telegram: '@anna_minsk' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect('telegram' in r.data).toBe(false);
+    expect(parseLead({ ...valid, telegram: 'x' }).ok).toBe(true);
+    expect(parseLead({ ...valid, telegram: 42 }).ok).toBe(true);
   });
 
   it('rejects unknown interest', () => {

@@ -18,7 +18,6 @@ function body(over: Record<string, unknown> = {}) {
   return {
     name: 'Анна',
     phone: '+375 29 123-45-67',
-    telegram: '',
     interest: 'subscription',
     comment: '',
     idempotencyKey: 'key-0001',

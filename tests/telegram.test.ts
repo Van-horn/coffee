@@ -448,9 +448,7 @@ describe("sendTelegramMessage", () => {
 
   it("posts to the given chat id and text", async () => {
     vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(new Response("{}", { status: 200 }));
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     await sendTelegramMessage(42, "hi");
     const [url, init] = fetchMock.mock.calls[0];
@@ -467,9 +465,7 @@ describe("sendTelegramMessage", () => {
     "sends the channel id %s unchanged as chat_id",
     async (channel) => {
       vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(new Response("{}", { status: 200 }));
+      const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
       vi.stubGlobal("fetch", fetchMock);
       await sendTelegramMessage(channel, "hi");
       expect(JSON.parse(fetchMock.mock.calls[0][1].body).chat_id).toBe(channel);
@@ -481,9 +477,7 @@ describe("sendTelegramMessage", () => {
     async (channel) => {
       vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
       vi.stubEnv("TELEGRAM_CHAT_ID", channel);
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(new Response("{}", { status: 200 }));
+      const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
       vi.stubGlobal("fetch", fetchMock);
       await sendTelegram(lead());
       const body = JSON.parse(fetchMock.mock.calls[0][1].body);
@@ -495,23 +489,14 @@ describe("sendTelegramMessage", () => {
   it("throws a token-free error when the token is missing", async () => {
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
     vi.stubGlobal("fetch", vi.fn());
-    await expect(sendTelegramMessage(42, "hi")).rejects.toThrow(
-      "telegram send failed",
-    );
+    await expect(sendTelegramMessage(42, "hi")).rejects.toThrow("telegram send failed");
   });
 
   it("never leaks the token, chat id or text in the error", async () => {
     vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response("{}", { status: 400 })),
-    );
-    const error = await sendTelegramMessage(987654321, "secret text").catch(
-      (e) => e as Error,
-    );
-    expect(inspect(error, { showHidden: true })).not.toMatch(
-      /SECRET-token|987654321|secret text/,
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 400 })));
+    const error = await sendTelegramMessage(987654321, "secret text").catch((e) => e as Error);
+    expect(inspect(error, { showHidden: true })).not.toMatch(/SECRET-token|987654321|secret text/);
   });
 });
 
@@ -550,6 +535,19 @@ describe("formatChannelMessage", () => {
       expect(msg).not.toContain(forbidden);
   });
 
+  it("falls back to a constant label for a corrupted interest", () => {
+    const msg = formatChannelMessage(
+      lead({ interest: "bogus" as unknown as StoredLead["interest"] }),
+    );
+    expect(msg).toBe("<b>Новая заявка</b> · заявка\nВремя: 15.10.2026 01:30 (Минск)");
+    expect(msg).not.toContain("undefined");
+  });
+
+  it("does not echo an invalid createdAt", () => {
+    const msg = formatChannelMessage(lead({ createdAt: "<i>+375291234567</i>" }));
+    expect(msg).toBe("<b>Новая заявка</b> · подписка\nВремя: время неизвестно (Минск)");
+  });
+
   it.each([
     ["subscription", "подписка"],
     ["order", "разовый заказ"],
@@ -573,7 +571,7 @@ describe("sendTelegram targets", () => {
       status: 400,
     });
   const dump = () =>
-    spies.map((s) => inspect(s.mock.calls, { depth: 10 })).join("\n");
+    spies.map((s) => inspect(s.mock.calls, { showHidden: true, depth: 10 })).join("\n");
   const bodies = () =>
     fetchMock.mock.calls.map(
       (c: unknown[]) =>
@@ -695,6 +693,55 @@ describe("sendTelegram targets", () => {
     await mod.sendTelegram(lead(), sleep);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(warnMock()).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects when both targets fail, with a safe message", async () => {
+    fetchMock.mockImplementation(async () => bad());
+    const err = await failure(sendTelegram(lead(), sleep));
+    expect(err?.message).toBe("telegram send failed: 400 Bad Request");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  describe("equal chat and channel ids (misconfiguration)", () => {
+    const WARN =
+      "telegram: TELEGRAM_CHAT_ID equals TELEGRAM_CHANNEL_ID: sending only the anonymized post (misconfiguration)";
+    it.each([
+      ["identical strings", CHANNEL, CHANNEL],
+      ["with whitespace", ` ${CHANNEL} `, CHANNEL],
+      ["case-insensitive names", "@Kvarta_Feed", "@kvarta_feed"],
+    ])("sends one anonymized post and warns once: %s", async (_n, a, b) => {
+      vi.stubEnv("TELEGRAM_CHAT_ID", a);
+      vi.stubEnv("TELEGRAM_CHANNEL_ID", b);
+      fetchMock.mockImplementation(async () => ok());
+      const mod = await import("@/lib/telegram");
+      await mod.sendTelegram(lead(), sleep);
+      await mod.sendTelegram(lead(), sleep);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(bodies()[0].text).toBe(formatChannelMessage(lead()));
+      const all = inspect(fetchMock.mock.calls, { showHidden: true, depth: 10 });
+      for (const pii of ["Анна", "375291234567", "29 123", "Хочу зерно"])
+        expect(all).not.toContain(pii);
+      const warns = warnMock().mock.calls.filter((c: unknown[]) => c[0] === WARN);
+      expect(warns).toHaveLength(1);
+      expect(dump()).not.toContain(CHANNEL);
+      expect(dump()).not.toContain("Kvarta_Feed");
+    });
+
+    it("treats a numeric id and the same id as a string as equal", async () => {
+      vi.stubEnv("TELEGRAM_CHAT_ID", "12345");
+      vi.stubEnv("TELEGRAM_CHANNEL_ID", "012345".slice(1));
+      fetchMock.mockImplementation(async () => ok());
+      await sendTelegram(lead(), sleep);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(bodies()[0].text).not.toContain("Анна");
+    });
+
+    it("throws when that single post fails", async () => {
+      vi.stubEnv("TELEGRAM_CHAT_ID", CHANNEL);
+      fetchMock.mockImplementation(async () => bad());
+      const err = await failure(sendTelegram(lead(), sleep));
+      expect(err?.message).toBe("telegram send failed: 400 Bad Request");
+    });
   });
 
   it("stays within the total deadline when both targets hang", async () => {

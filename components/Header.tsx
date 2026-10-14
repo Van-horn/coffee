@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Logo from './Logo';
-import { HEADER_HEIGHT } from './Section';
+import { CONTAINER_PX, HEADER_HEIGHT } from './Section';
 import { colors } from '@/theme/tokens';
 
 const NAV = [
@@ -36,7 +36,7 @@ export default function Header() {
           maxWidth: 1440,
           mx: 'auto',
           height: '100%',
-          px: { xs: '20px', sm: '40px', md: '120px' },
+          px: CONTAINER_PX,
           display: 'grid',
           gridTemplateColumns: { xs: '1fr auto', md: '1fr auto 1fr' },
           alignItems: 'center',
@@ -64,7 +64,7 @@ export default function Header() {
                     display: 'inline-flex',
                     alignItems: 'center',
                     minHeight: 44,
-                    px: '16px',
+                    px: { md: '12px', lg: '16px' },
                     borderRadius: '6px',
                     fontSize: 16,
                     lineHeight: '24px',
@@ -72,7 +72,7 @@ export default function Header() {
                     color: colors.ink,
                     textDecoration: 'none',
                     transition: 'background-color 0.15s',
-                    '&:hover': { bgcolor: 'rgba(35, 26, 20, 0.06)' },
+                    '&:hover': { bgcolor: `color-mix(in srgb, ${colors.ink} 6%, transparent)` },
                     '&:focus-visible': focusRing,
                   }}
                 >

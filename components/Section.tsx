@@ -6,6 +6,13 @@ import { colors } from '@/theme/tokens';
 // Sticky header height in px: 64 below 1024, 72 from 1024.
 export const HEADER_HEIGHT = { mobile: 64, desktop: 72 } as const;
 
+// Side padding of the content container: 20 mobile, 40 tablet, then 40 at 1024 growing linearly to 120 at 1440.
+export const CONTAINER_PX = {
+  xs: '20px',
+  sm: '40px',
+  md: 'clamp(40px, calc(40px + (100vw - 1024px) * 0.1923), 120px)',
+} as const;
+
 export type SectionTone = 'paper' | 'paper2' | 'ink';
 
 const background: Record<SectionTone, string> = {
@@ -39,7 +46,7 @@ export default function Section({ id, tone = 'paper', labelledBy, children, sx }
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      <Box sx={{ maxWidth: 1440, mx: 'auto', px: { xs: '20px', sm: '40px', md: '120px' } }}>
+      <Box sx={{ maxWidth: 1440, mx: 'auto', px: CONTAINER_PX }}>
         {children}
       </Box>
     </Box>

@@ -24,7 +24,7 @@ export default function Hero() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 640px) minmax(0, 1fr)' },
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 640fr) minmax(0, 469fr)' },
           alignItems: 'center',
           columnGap: '48px',
           rowGap: { xs: '40px', sm: '56px' },

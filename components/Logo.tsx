@@ -36,6 +36,7 @@ export default function Logo({ tone = 'onLight' }: LogoProps) {
         >
           Кварта
         </Box>
+        {' '}
         <Box
           component="span"
           sx={{

@@ -7,7 +7,7 @@ import { CONTACT } from '@/lib/contact';
 import { colors } from '@/theme/tokens';
 
 export const metadata: Metadata = {
-  title: 'Политика обработки данных — Кварта',
+  title: 'Политика обработки данных',
   robots: { index: true },
 };
 

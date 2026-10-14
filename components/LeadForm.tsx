@@ -21,32 +21,26 @@ import {
   validateLeadFields,
   type FormValues,
 } from '@/lib/lead-client';
-import { parseBotUsername } from '@/lib/bot-username';
 import { formatPhoneMask } from '@/lib/phone';
 import { colors, radius } from '@/theme/tokens';
 
 type Status = 'idle' | 'sending' | 'success' | 'failed';
-type FieldKey = 'name' | 'phone' | 'telegram' | 'interest' | 'comment';
+type FieldKey = 'name' | 'phone' | 'interest' | 'comment';
 
 const IDEM_KEY = 'kvarta_idem';
 const IDEM_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const REFRESH_MESSAGE = 'Обновите страницу и попробуйте ещё раз.';
 const HONEYPOT_NAME = 'hp_field_x7';
 
-// Read as a module constant so Next inlines it at build time; empty (or not a valid bot username)
-// hides the whole Telegram confirmation box.
-const BOT_USERNAME = parseBotUsername(process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME);
-
 // An idempotency key is bound to the content it was first sent with (fingerprint).
 interface KeyRecord {
   key: string;
   fp: string;
 }
-const FIELD_ORDER: FieldKey[] = ['name', 'phone', 'telegram', 'interest', 'comment'];
+const FIELD_ORDER: FieldKey[] = ['name', 'phone', 'interest', 'comment'];
 const FIELD_LABEL: Record<FieldKey, string> = {
   name: 'Имя',
   phone: 'Телефон',
-  telegram: 'Ник в Telegram',
   interest: 'Что интересует',
   comment: 'Комментарий',
 };
@@ -56,7 +50,7 @@ const INTEREST_OPTIONS = [
   { value: 'question', label: 'Вопрос' },
 ] as const;
 const HOURS_NOTE = 'Пн–Пт 08:00–20:00, Сб–Вс 10:00–18:00';
-const INITIAL: FormValues = { name: '', phone: '', telegram: '', interest: 'subscription', comment: '' };
+const INITIAL: FormValues = { name: '', phone: '', interest: 'subscription', comment: '' };
 
 function generateKey(): string {
   try {
@@ -184,7 +178,7 @@ export default function LeadForm() {
   const [failMessage, setFailMessage] = useState('');
   const [extraMessages, setExtraMessages] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
-  const [done, setDone] = useState<{ phone: string; telegram: string; leadId: string | null } | null>(null);
+  const [done, setDone] = useState<{ phone: string } | null>(null);
 
   const inFlight = useRef(false);
   const renderedAt = useRef(0);
@@ -296,10 +290,7 @@ export default function LeadForm() {
       if (result.kind === 'ok') {
         keyRef.current = null;
         storeKey(null);
-        // The start link only ever carries this request's own key. A duplicate (or any answer that
-        // names another id) hides the bot box: that lead belongs to someone else.
-        const botKey = !result.duplicate && result.leadId === record.key && IDEM_RE.test(record.key) ? record.key : null;
-        setDone({ phone: formatPhoneMask(values.phone), telegram: payload.telegram, leadId: botKey });
+        setDone({ phone: formatPhoneMask(values.phone) });
         setErrors({});
         setAttempted(false);
         setStatus('success');
@@ -392,11 +383,6 @@ export default function LeadForm() {
         <Typography variant="bodyM" sx={{ color: colors.inkSoft, mt: 2, mb: 0 }}>
           {`Менеджер позвонит на ${done.phone} в рабочее время.`}
         </Typography>
-        {done.telegram ? (
-          <Typography variant="bodyM" sx={{ color: colors.inkSoft, mt: 1, mb: 0 }}>
-            {`Если удобнее, напишет в Telegram: @${done.telegram}.`}
-          </Typography>
-        ) : null}
         <Box sx={{ bgcolor: colors.paper2, borderRadius: `${radius.md}px`, p: 2, mt: 3 }}>
           <Typography variant="bodyS" sx={{ fontWeight: 500, m: 0 }}>
             Рабочее время
@@ -405,35 +391,6 @@ export default function LeadForm() {
             {HOURS_NOTE}
           </Typography>
         </Box>
-        {BOT_USERNAME && done.leadId ? (
-          <Box
-            data-testid="bot-box"
-            sx={{ bgcolor: colors.paper2, color: colors.ink2, borderRadius: `${radius.md}px`, p: 2, mt: 2 }}
-          >
-            <Typography variant="bodyS" sx={{ fontWeight: 500, m: 0, color: colors.ink }}>
-              Подтверждение в Telegram
-            </Typography>
-            <Typography variant="bodyS" sx={{ color: colors.inkSoft, m: 0 }}>
-              {`Нажмите Start у бота @${BOT_USERNAME}: он пришлёт одно сообщение с деталями заявки. Бот не читает переписку и ничего больше не отправит.`}
-            </Typography>
-          </Box>
-        ) : null}
-        {BOT_USERNAME && done.leadId ? (
-          <Button
-            component="a"
-            variant="contained"
-            fullWidth
-            href={`https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(done.leadId)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            sx={{ mt: 2, height: 56, fontSize: 16, fontWeight: 500, '&:focus-visible': focusRing }}
-          >
-            Открыть бота в Telegram
-            <Box component="span" sx={hiddenSx}>
-              {' (откроется в новой вкладке)'}
-            </Box>
-          </Button>
-        ) : null}
         <Button
           type="button"
           variant="outlined"
@@ -580,33 +537,6 @@ export default function LeadForm() {
           </Field>
         </Box>
 
-        <Field
-          id="lead-telegram"
-          label="Ник в Telegram (по желанию)"
-          hint="По желанию: менеджер увидит ник в заявке"
-          error={errors.telegram}
-        >
-          <OutlinedInput
-            id="lead-telegram"
-            name="telegram"
-            fullWidth
-            value={values.telegram}
-            placeholder="@username"
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            readOnly={pending}
-            error={Boolean(errors.telegram)}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setField('telegram', e.target.value)}
-            onBlur={() => onBlur('telegram')}
-            inputRef={(el: HTMLInputElement | null) => {
-              fieldRefs.current.telegram = el;
-            }}
-            inputProps={inputProps('telegram')}
-            sx={inputSx}
-          />
-        </Field>
-
         <Box
           component="fieldset"
           ref={interestRef}
@@ -737,8 +667,7 @@ export default function LeadForm() {
         </Box>
 
         <Typography variant="bodyS" sx={{ color: colors.inkSoft, m: 0 }}>
-          Нажимая кнопку, вы соглашаетесь на обработку имени, телефона и ника в Telegram для связи по заявке. Ник нигде
-          не публикуется.{' '}
+          Нажимая кнопку, вы соглашаетесь на обработку имени и телефона для связи по заявке. Телефон и имя получает только менеджер Кварты.{' '}
           <Link
             href="/privacy"
             underline="always"

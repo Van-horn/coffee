@@ -10,7 +10,7 @@ import { colors, radius } from '@/theme/tokens';
 const CHECKLIST = [
   'Ответим в рабочее время: пн–пт 8–20, сб–вс 10–18',
   'Платить на сайте не нужно',
-  'Ник нужен только для сообщения по заявке',
+  'Данные нужны только для связи по заявке',
 ];
 
 const STEPS = [
@@ -39,8 +39,7 @@ export default function OrderSection() {
             </AccentHeading>
           </Box>
           <Typography variant="bodyL" sx={{ color: colors.paperDim, mt: 3, mb: 0 }}>
-            Укажите телефон. Менеджер перезвонит в рабочее время и всё оформит: подписку или разовый заказ. Ник в
-            Telegram нужен только если удобнее переписываться.
+            Укажите телефон. Менеджер перезвонит в рабочее время и всё оформит: подписку или разовый заказ.
           </Typography>
 
           <Box component="ul" sx={{ listStyle: 'none', m: 0, mt: 4, p: 0, display: 'grid', gap: 1.5 }}>

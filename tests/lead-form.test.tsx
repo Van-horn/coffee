@@ -112,9 +112,9 @@ describe('LeadForm validation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Исправьте 2 поля');
     await user.type(screen.getByLabelText('Имя'), 'Анна');
     await user.type(screen.getByLabelText('Телефон'), '80291234567');
-    await user.type(screen.getByLabelText(/Ник в Telegram/), 'x');
+    fireEvent.change(screen.getByLabelText('Комментарий'), { target: { value: 'x'.repeat(501) } });
     await user.click(submitButton());
-    expect(screen.getByLabelText(/Ник в Telegram/)).toHaveFocus();
+    expect(screen.getByLabelText('Комментарий')).toHaveFocus();
     expect(screen.getByRole('alert')).toHaveTextContent('Исправьте 1 поле');
     await user.clear(screen.getByLabelText('Имя'));
     await user.clear(screen.getByLabelText('Телефон'));
@@ -131,6 +131,35 @@ describe('LeadForm validation', () => {
   });
 });
 
+describe('LeadForm without a Telegram username', () => {
+  it('has no Telegram input, hint or label', () => {
+    const { container } = renderForm();
+    expect(container.querySelector('[name="telegram"]')).toBeNull();
+    expect(screen.queryByLabelText(/Telegram/)).toBeNull();
+    expect(container.textContent).not.toMatch(/Ник|@username/);
+  });
+
+  it('shows the channel-flow consent line with the privacy link', () => {
+    renderForm();
+    expect(
+      screen.getByText(
+        /Нажимая кнопку, вы соглашаетесь на обработку имени и телефона для связи по заявке\. Телефон и имя получает только менеджер Кварты\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Политика обработки данных' })).toHaveAttribute('href', '/privacy');
+  });
+
+  it('never renders a foreign lead id from a duplicate answer', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ ok: true, leadId: 'existing-lead-01', duplicate: true })));
+    const user = userEvent.setup();
+    renderForm();
+    await fillValid(user);
+    await user.click(submitButton());
+    await screen.findByText('Заявка принята');
+    expect(document.body.innerHTML).not.toContain('existing-lead-01');
+  });
+});
+
 describe('LeadForm sending', () => {
   it('sends the exact body and shows success', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(response()));
@@ -138,7 +167,6 @@ describe('LeadForm sending', () => {
     const user = userEvent.setup();
     renderForm();
     await fillValid(user);
-    await user.type(screen.getByLabelText(/Ник в Telegram/), '@anna_minsk');
     await user.click(submitButton());
     await screen.findByText('Заявка принята');
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -146,19 +174,21 @@ describe('LeadForm sending', () => {
     expect(url).toBe('/api/lead');
     const body = bodyOf(fetchMock, 0);
     expect(Object.keys(body).sort()).toEqual(
-      ['attribution', 'comment', 'idempotencyKey', 'interest', 'name', 'phone', 'renderedAt', 'telegram', 'website'].sort(),
+      ['attribution', 'comment', 'idempotencyKey', 'interest', 'name', 'phone', 'renderedAt', 'website'].sort(),
     );
     expect(body.website).toBe('');
     expect(body.name).toBe('Анна');
     expect(body.phone).toBe('+375291234567');
-    expect(body.telegram).toBe('anna_minsk');
     expect(body.interest).toBe('subscription');
     expect(body.idempotencyKey.length).toBeGreaterThanOrEqual(8);
     expect(body.idempotencyKey.length).toBeLessThanOrEqual(64);
     expect(body.attribution.submittedAt).toMatch(/^\d+$/);
     expect(typeof body.renderedAt).toBe('number');
     expect(screen.getByText(/Менеджер позвонит на \+375 29 123-45-67/)).toBeInTheDocument();
-    expect(screen.getByText(/@anna_minsk/)).toBeInTheDocument();
+    expect(screen.getByText('Отправить ещё одну заявку')).toBeInTheDocument();
+    expect(screen.getByText('Пн–Пт 08:00–20:00, Сб–Вс 10:00–18:00')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Telegram|бот/i);
+    expect(screen.queryByRole('link', { name: /бота/ })).toBeNull();
   });
 
   it('takes the honeypot value from the neutral-named input into the website key', async () => {

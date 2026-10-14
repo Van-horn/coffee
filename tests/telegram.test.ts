@@ -2,6 +2,7 @@ import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoredLead } from "@/lib/store";
 import {
+  formatChannelMessage,
   formatLeadMessage,
   formatMinskTime,
   sendTelegram,
@@ -221,6 +222,7 @@ describe("sendTelegram", () => {
     vi.resetModules();
     vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
     vi.stubEnv("TELEGRAM_CHAT_ID", CHAT);
+    vi.stubEnv("TELEGRAM_CHANNEL_ID", "");
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     sleep.mockClear();
@@ -495,5 +497,201 @@ describe("sendTelegramMessage", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 400 })));
     const error = await sendTelegramMessage(987654321, "secret text").catch((e) => e as Error);
     expect(inspect(error, { showHidden: true })).not.toMatch(/SECRET-token|987654321|secret text/);
+  });
+});
+
+describe("formatChannelMessage", () => {
+  const hostile = lead({
+    leadId: "LEAD-SECRET-ID-1234",
+    name: "<b>Анна</b>",
+    phone: "+375291234567",
+    comment: "Секретный комментарий",
+    attribution: {
+      utm_source: "src-val",
+      utm_campaign: "camp-val",
+      yclid: "click-val",
+      landing: "https://kvarta.by/land-val",
+      referrer: "https://ref.example/ref-val",
+    },
+  });
+
+  it("never contains personal or tracking data", () => {
+    const msg = formatChannelMessage(hostile);
+    for (const forbidden of [
+      "Анна",
+      "<b>Анна",
+      "375",
+      "291234567",
+      "29 123",
+      "Секретный",
+      "src-val",
+      "camp-val",
+      "click-val",
+      "land-val",
+      "ref-val",
+      "LEAD-SECRET-ID-1234",
+      "id ",
+    ])
+      expect(msg).not.toContain(forbidden);
+  });
+
+  it.each([
+    ["subscription", "подписка"],
+    ["order", "разовый заказ"],
+    ["question", "вопрос"],
+  ] as const)("renders the exact post for %s", (interest, label) => {
+    expect(formatChannelMessage(lead({ interest }))).toBe(
+      `<b>Новая заявка</b> · ${label}\nВремя: 15.10.2026 01:30 (Минск)`,
+    );
+  });
+});
+
+describe("sendTelegram targets", () => {
+  const PRIVATE = "555000111";
+  const CHANNEL = "-1009998887776";
+  const sleep = async () => {};
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let spies: ReturnType<typeof vi.spyOn>[];
+  const ok = () => new Response("{}", { status: 200 });
+  const bad = () =>
+    new Response(JSON.stringify({ ok: false, description: "Bad Request" }), {
+      status: 400,
+    });
+  const dump = () =>
+    spies.map((s) => inspect(s.mock.calls, { depth: 10 })).join("\n");
+  const bodies = () =>
+    fetchMock.mock.calls.map(
+      (c: unknown[]) =>
+        JSON.parse((c[1] as { body: string }).body) as {
+          chat_id: string;
+          text: string;
+        },
+    );
+  const failure = (p: Promise<void>) =>
+    p.then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+  const warnMock = () => console.warn as unknown as ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", TOKEN);
+    vi.stubEnv("TELEGRAM_CHAT_ID", PRIVATE);
+    vi.stubEnv("TELEGRAM_CHANNEL_ID", CHANNEL);
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    spies = (["log", "warn", "error", "info", "debug"] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    );
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("sends the full message to the private chat and the anonymized one to the channel", async () => {
+    fetchMock.mockImplementation(async () => ok());
+    await sendTelegram(lead(), sleep);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const byChat = Object.fromEntries(bodies().map((b) => [b.chat_id, b.text]));
+    expect(byChat[PRIVATE]).toContain("Анна Секретова");
+    expect(byChat[PRIVATE]).toBe(formatLeadMessage(lead()));
+    expect(byChat[CHANNEL]).toBe(formatChannelMessage(lead()));
+    expect(byChat[CHANNEL]).not.toContain("Анна");
+    expect(byChat[CHANNEL]).not.toContain("375");
+  });
+
+  it("sends only to the private chat when no channel is configured", async () => {
+    vi.stubEnv("TELEGRAM_CHANNEL_ID", "");
+    fetchMock.mockImplementation(async () => ok());
+    await sendTelegram(lead(), sleep);
+    expect(bodies().map((b) => b.chat_id)).toEqual([PRIVATE]);
+  });
+
+  it("sends only the anonymized post when only the channel is configured, and warns once about the chat id", async () => {
+    vi.stubEnv("TELEGRAM_CHAT_ID", "");
+    fetchMock.mockImplementation(async () => ok());
+    const mod = await import("@/lib/telegram");
+    await mod.sendTelegram(lead(), sleep);
+    await mod.sendTelegram(lead(), sleep);
+    expect(bodies().map((b) => b.chat_id)).toEqual([CHANNEL, CHANNEL]);
+    expect(bodies()[0].text).not.toContain("Анна");
+    expect(warnMock()).toHaveBeenCalledTimes(1);
+    expect(warnMock()).toHaveBeenCalledWith(
+      "telegram: TELEGRAM_CHAT_ID not set: order details are not delivered to a private chat",
+    );
+  });
+
+  it("warns once per process when only a token exists", async () => {
+    vi.stubEnv("TELEGRAM_CHAT_ID", "");
+    vi.stubEnv("TELEGRAM_CHANNEL_ID", "");
+    const mod = await import("@/lib/telegram");
+    await mod.sendTelegram(lead(), sleep);
+    await mod.sendTelegram(lead(), sleep);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(warnMock()).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves and logs a PII-free line when only the channel post fails", async () => {
+    fetchMock.mockImplementation(async (_u: string, init: { body: string }) =>
+      JSON.parse(init.body).chat_id === CHANNEL ? bad() : ok(),
+    );
+    await expect(sendTelegram(lead(), sleep)).resolves.toBeUndefined();
+    const log = dump();
+    expect(log).toContain("channel");
+    for (const secret of [TOKEN, "api.telegram.org", CHANNEL, PRIVATE, "Анна", "+375291234567"])
+      expect(log).not.toContain(secret);
+  });
+
+  it("rejects with a safe message when the private target fails", async () => {
+    fetchMock.mockImplementation(async (_u: string, init: { body: string }) =>
+      JSON.parse(init.body).chat_id === PRIVATE ? bad() : ok(),
+    );
+    const err = await failure(sendTelegram(lead(), sleep));
+    expect(err?.message).toBe("telegram send failed: 400 Bad Request");
+    for (const secret of [TOKEN, CHANNEL, PRIVATE, "Анна"])
+      expect(inspect(err, { showHidden: true, depth: 10 })).not.toContain(secret);
+  });
+
+  it("rejects when only the channel is configured and it fails", async () => {
+    vi.stubEnv("TELEGRAM_CHAT_ID", "");
+    fetchMock.mockImplementation(async () => bad());
+    const err = await failure(sendTelegram(lead(), sleep));
+    expect(err?.message).toBe("telegram send failed: 400 Bad Request");
+  });
+
+  it("does nothing and warns once when nothing is configured", async () => {
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
+    vi.stubEnv("TELEGRAM_CHAT_ID", "");
+    vi.stubEnv("TELEGRAM_CHANNEL_ID", "");
+    const mod = await import("@/lib/telegram");
+    await mod.sendTelegram(lead(), sleep);
+    await mod.sendTelegram(lead(), sleep);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(warnMock()).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays within the total deadline when both targets hang", async () => {
+    let clock = 0;
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+    fetchMock.mockImplementation(async () => {
+      const start = clock;
+      const t = timeoutSpy.mock.calls.at(-1)![0] as number;
+      clock = Math.max(clock, start + t);
+      throw new DOMException("timed out", "TimeoutError");
+    });
+    const err = await failure(
+      sendTelegram(
+        lead(),
+        async (ms) => {
+          clock += ms;
+        },
+        () => clock,
+      ),
+    );
+    expect(err?.message).toBe("telegram send failed: TimeoutError");
+    expect(clock).toBeLessThanOrEqual(4000);
   });
 });

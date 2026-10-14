@@ -225,17 +225,31 @@ export async function sendTelegramMessage(
   throw new Error(`telegram send failed: ${last}`);
 }
 
+/** Public-feed post: the interest and the time only, never anything about the customer. */
+export function formatChannelMessage(lead: StoredLead): string {
+  return (
+    `<b>Новая заявка</b> · ${INTEREST_LABELS[lead.interest]}\n` +
+    `Время: ${formatMinskTime(lead.createdAt)} (Минск)`
+  );
+}
+
+let warnedNoPrivateChat = false;
+
 /**
- * Posts a lead into the private orders channel (TELEGRAM_CHAT_ID: channel id or @name); THROWS when delivery ultimately fails so the
- * caller can release its marker. A no-op (one warning) when the token or chat id is missing.
+ * Delivers a lead: the full message to the private chat (TELEGRAM_CHAT_ID) and an anonymized post
+ * to the public channel (TELEGRAM_CHANNEL_ID), in parallel within one deadline. THROWS when the
+ * private target fails (or when the channel is the only target and fails) so the caller can
+ * release its marker; a failing channel post alone is logged and ignored. A no-op (one warning)
+ * when nothing is configured.
  */
 export async function sendTelegram(
   lead: StoredLead,
   sleep: (ms: number) => Promise<void> = defaultSleep,
   now: () => number = Date.now,
 ): Promise<void> {
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!process.env.TELEGRAM_BOT_TOKEN || !chatId) {
+  const privateChat = process.env.TELEGRAM_CHAT_ID || "";
+  const channel = process.env.TELEGRAM_CHANNEL_ID || "";
+  if (!process.env.TELEGRAM_BOT_TOKEN || (!privateChat && !channel)) {
     if (!warnedDisabled) {
       warnedDisabled = true;
       console.warn(
@@ -244,5 +258,26 @@ export async function sendTelegram(
     }
     return;
   }
-  await sendTelegramMessage(chatId, formatLeadMessage(lead), { sleep, now });
+  if (!privateChat && !warnedNoPrivateChat) {
+    warnedNoPrivateChat = true;
+    console.warn(
+      "telegram: TELEGRAM_CHAT_ID not set: order details are not delivered to a private chat",
+    );
+  }
+  const opts = { sleep, now };
+  const [priv, pub] = await Promise.allSettled([
+    privateChat
+      ? sendTelegramMessage(privateChat, formatLeadMessage(lead), opts)
+      : Promise.resolve(),
+    channel
+      ? sendTelegramMessage(channel, formatChannelMessage(lead), opts)
+      : Promise.resolve(),
+  ]);
+  if (priv.status === "rejected") throw priv.reason;
+  if (pub.status === "rejected") {
+    if (!privateChat) throw pub.reason;
+    const reason =
+      pub.reason instanceof Error ? pub.reason.message : "telegram send failed";
+    console.warn(`telegram: channel post failed (${reason})`);
+  }
 }

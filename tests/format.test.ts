@@ -15,6 +15,10 @@ describe('formatRuDate', () => {
     expect(formatRuDate(new Date('2026-12-31T06:00:00Z'))).toBe('четверг, 31 декабря');
   });
 
+  it('crosses the year boundary on the Minsk calendar', () => {
+    expect(formatRuDate(new Date('2026-12-31T21:30:00Z'))).toBe('пятница, 1 января');
+  });
+
   it('covers every month in the genitive case', () => {
     const months = [
       'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',

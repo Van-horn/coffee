@@ -22,8 +22,8 @@ export function nextRoastText(now: Date): string {
 const subscribe = () => () => {};
 const getServer = () => FALLBACK;
 
-// The text changes at most a couple of times a week, so a minute-resolution snapshot is plenty;
-// useSyncExternalStore compares strings, so an unchanged text never re-renders.
+// Read once on the client after hydration (there is no subscription): the text does not update
+// while a tab stays open, which is fine for a line that changes only a couple of times a week.
 const getClient = () => nextRoastText(new Date());
 
 export default function NextRoast() {

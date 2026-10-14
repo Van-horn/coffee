@@ -37,6 +37,9 @@ const tileStyle: Record<TileKind, { bg: string; color: string; border: string }>
   outline: { bg: 'transparent', color: colors.paper, border: colors.paper },
 };
 
+// Labels need about 78px per tile to fit "самовывоз" without breaking mid-word; below that the tiles show icon and day only.
+const LABELS_FROM = '@media (min-width:700px)';
+
 const visuallyHidden = {
   position: 'absolute',
   width: '1px',
@@ -75,8 +78,10 @@ function DayTile({ day }: { day: Day }) {
         border: `1px solid ${s.border}`,
         borderRadius: { xs: '8px', sm: `${radius.md}px` },
         boxSizing: 'border-box',
-        minHeight: { xs: 64, sm: 92 },
-        px: { xs: 0, sm: '8px' },
+        minHeight: 64,
+        [LABELS_FROM]: { minHeight: 92 },
+        px: { xs: 0, sm: '4px', md: '8px' },
+        overflow: 'hidden',
         py: { xs: '12px', sm: '10px' },
         display: 'flex',
         flexDirection: 'column',
@@ -95,7 +100,16 @@ function DayTile({ day }: { day: Day }) {
         <Typography
           variant="bodyS"
           component="span"
-          sx={{ color: 'inherit', display: { xs: 'none', sm: 'block' }, fontSize: 13, lineHeight: '18px', fontWeight: day.kind === 'dim' ? 400 : 500 }}
+          sx={{
+            color: 'inherit',
+            display: 'none',
+            [LABELS_FROM]: { display: 'block' },
+            maxWidth: '100%',
+            overflowWrap: 'anywhere',
+            fontSize: { sm: 12, md: 13 },
+            lineHeight: '18px',
+            fontWeight: day.kind === 'dim' ? 400 : 500,
+          }}
         >
           {day.label}
         </Typography>

@@ -44,7 +44,7 @@ export default function Hero() {
             variant="hero"
             component="h1"
             id="hero-title"
-            sx={{ mt: { xs: '20px', md: '24px' }, mb: 0, color: colors.ink }}
+            sx={{ mt: { xs: '20px', md: '24px' }, mb: 0, color: colors.ink, '@media (min-width:1441px)': { textWrap: 'balance' } }}
           >
             Кофе, обжаренный в четверг. У вас —{' '}
             <Box component="span" sx={{ whiteSpace: 'nowrap' }}>

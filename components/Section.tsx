@@ -32,10 +32,12 @@ interface SectionProps {
   labelledBy?: string;
   children: ReactNode;
   sx?: SxProps<Theme>;
+  // Stretch the section to its parent's height and let the content container be a flex column.
+  fill?: boolean;
 }
 
 // Full-bleed section; the content spans the screen between fluid gutters (1200 wide at 1440, 688 tablet, 350 mobile).
-export default function Section({ id, tone = 'paper', labelledBy, children, sx }: SectionProps) {
+export default function Section({ id, tone = 'paper', labelledBy, children, sx, fill }: SectionProps) {
   return (
     <Box
       component="section"
@@ -47,11 +49,12 @@ export default function Section({ id, tone = 'paper', labelledBy, children, sx }
           color: tone === 'ink' ? colors.paper : colors.ink,
           py: { xs: 7, sm: 9, md: 13 }, // 56 / 72 / 104
           scrollMarginTop: { xs: `${HEADER_HEIGHT.mobile}px`, md: `${HEADER_HEIGHT.desktop}px` },
+          ...(fill && { flex: 1, display: 'flex', flexDirection: 'column' }),
         },
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      <Box sx={{ px: CONTAINER_PX }}>
+      <Box sx={[{ px: CONTAINER_PX }, fill && { flex: 1, display: 'flex', flexDirection: 'column' }]}>
         {children}
       </Box>
     </Box>

@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
 import Logo from '@/components/Logo';
-import Section from '@/components/Section';
+import Section, { HEADER_HEIGHT } from '@/components/Section';
 import { CONTACT } from '@/lib/contact';
 import { colors } from '@/theme/tokens';
 
@@ -33,8 +33,21 @@ function Column({ title, children }: { title: string; children: ReactNode }) {
 
 export default function Footer() {
   return (
-    <Box component="footer" id="contacts" sx={{ scrollMarginTop: { xs: '64px', md: '72px' } }}>
-      <Section tone="ink" sx={{ py: { xs: 7, sm: 8, md: 10 } }}>
+    <Box
+      component="footer"
+      id="contacts"
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        scrollMarginTop: { xs: `${HEADER_HEIGHT.mobile}px`, md: `${HEADER_HEIGHT.desktop}px` },
+        // Fill the screen below the sticky header so the #contacts anchor can scroll to the block's start.
+        minHeight: {
+          xs: [`calc(100vh - ${HEADER_HEIGHT.mobile}px)`, `calc(100svh - ${HEADER_HEIGHT.mobile}px)`],
+          md: [`calc(100vh - ${HEADER_HEIGHT.desktop}px)`, `calc(100svh - ${HEADER_HEIGHT.desktop}px)`],
+        },
+      }}
+    >
+      <Section tone="ink" fill sx={{ py: { xs: 7, sm: 8, md: 10 } }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: { xs: 5, md: 6 } }}>
           <Logo tone="onInk" />
           <Typography variant="body1" sx={dim}>
@@ -47,6 +60,7 @@ export default function Footer() {
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
             gap: { xs: 4, md: 6 },
+            mb: { xs: 5, md: 7 },
           }}
         >
           <Column title="Адрес">
@@ -89,7 +103,7 @@ export default function Footer() {
 
         <Box
           sx={{
-            mt: { xs: 5, md: 7 },
+            mt: 'auto',
             pt: 3,
             borderTop: `1px solid ${colors.ink2}`,
             display: 'flex',

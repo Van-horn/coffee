@@ -98,3 +98,9 @@ export function hoursLabel(now: Date): string {
   const nextOpen = t < open * 60 ? open : hoursFor((dow + 1) % 7).open;
   return `откроемся в ${pad(nextOpen)}:00`;
 }
+
+/** Which opening-hours row applies to the Minsk calendar day containing `now`. */
+export function minskDayGroup(now: Date): 'weekdays' | 'weekend' {
+  const dow = toMinsk(now).getUTCDay();
+  return dow === 0 || dow === 6 ? 'weekend' : 'weekdays';
+}

@@ -3,6 +3,7 @@ import {
   hoursLabel,
   isOpenNow,
   isOrderOpen,
+  minskDayGroup,
   nextDelivery,
   nextRoast,
   orderCutoff,
@@ -176,5 +177,18 @@ describe('hoursLabel', () => {
   });
   it('closing minute is closed', () => {
     expect(hoursLabel(minsk(2026, 10, 14, 20, 0))).toBe('откроемся в 08:00');
+  });
+});
+
+describe('minskDayGroup', () => {
+  it('Fri 23:30 UTC is Saturday 02:30 in Minsk: weekend', () => {
+    expect(minskDayGroup(new Date(Date.UTC(2026, 9, 16, 23, 30)))).toBe('weekend');
+  });
+  it('Sun 21:30 UTC is Monday 00:30 in Minsk: weekdays', () => {
+    expect(minskDayGroup(new Date(Date.UTC(2026, 9, 18, 21, 30)))).toBe('weekdays');
+  });
+  it('midweek is weekdays, Sunday noon is weekend', () => {
+    expect(minskDayGroup(minsk(2026, 10, 14, 12, 0))).toBe('weekdays');
+    expect(minskDayGroup(minsk(2026, 10, 18, 12, 0))).toBe('weekend');
   });
 });

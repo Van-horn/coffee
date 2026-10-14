@@ -29,7 +29,7 @@ const HOURS = [
 
 export default function Delivery() {
   return (
-    <Section id="delivery" tone="paper" labelledBy="delivery-title">
+    <Section id="delivery" defer tone="paper" labelledBy="delivery-title">
       <Eyebrow>04 · доставка и самовывоз</Eyebrow>
       <Box sx={{ mt: '12px' }}>
         <AccentHeading id="delivery-title">

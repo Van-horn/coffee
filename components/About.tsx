@@ -9,7 +9,7 @@ import { colors, radius } from '@/theme/tokens';
 // Open item: replace RoasterPlaceholder with a licensed photo at public/images/roastery.jpg (next/image).
 export default function About() {
   return (
-    <Section id="about" tone="paper2" labelledBy="about-title">
+    <Section id="about" defer tone="paper2" labelledBy="about-title">
       <Box
         sx={{
           display: 'grid',

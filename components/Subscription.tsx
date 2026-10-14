@@ -24,7 +24,7 @@ const PRICE_ROWS = [
 
 export default function Subscription() {
   return (
-    <Section id="subscription" tone="paper2" labelledBy="subscription-title">
+    <Section id="subscription" defer tone="paper2" labelledBy="subscription-title">
       <Box
         sx={{
           display: 'grid',

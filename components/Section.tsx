@@ -34,10 +34,12 @@ interface SectionProps {
   sx?: SxProps<Theme>;
   // Stretch the section to its parent's height and let the content container be a flex column.
   fill?: boolean;
+  // Skip rendering work until the section nears the viewport (for sections below the fold).
+  defer?: boolean;
 }
 
 // Full-bleed section; the content spans the screen between fluid gutters (1200 wide at 1440, 688 tablet, 350 mobile).
-export default function Section({ id, tone = 'paper', labelledBy, children, sx, fill }: SectionProps) {
+export default function Section({ id, tone = 'paper', labelledBy, children, sx, fill, defer }: SectionProps) {
   return (
     <Box
       component="section"
@@ -49,6 +51,7 @@ export default function Section({ id, tone = 'paper', labelledBy, children, sx, 
           color: tone === 'ink' ? colors.paper : colors.ink,
           py: { xs: 7, sm: 9, md: 13 }, // 56 / 72 / 104
           scrollMarginTop: { xs: `${HEADER_HEIGHT.mobile}px`, md: `${HEADER_HEIGHT.desktop}px` },
+          ...(defer && { contentVisibility: 'auto', containIntrinsicSize: 'auto 900px' }),
           ...(fill && { flex: 1, display: 'flex', flexDirection: 'column' }),
         },
         ...(Array.isArray(sx) ? sx : [sx]),

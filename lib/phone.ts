@@ -26,8 +26,17 @@ export function normalizeBelarusPhone(input: string): string | null {
 
 /** Input mask: '+375 XX XXX-XX-XX', applied progressively to partial input. */
 export function formatPhoneMask(input: string): string {
-  const d = stripPrefix(digitsOf(input)).slice(0, 9);
-  if (!d) return '';
+  const digits = digitsOf(input);
+  const hasPlus = typeof input === 'string' && input.trim().startsWith('+');
+  if (!digits) return hasPlus ? '+' : '';
+  // Incomplete prefixes stay unchanged until the next digit disambiguates them,
+  // so the mask can be applied on every keystroke ('+', '+3', '+37', '+375', '8', '80').
+  if (hasPlus && '375'.startsWith(digits)) return `+${digits}`;
+  if (digits === '8' || digits === '80') return digits;
+  const d = stripPrefix(digits).slice(0, 9);
+  // Known limitation: typing a bare '375...' (no '+', no '8') digit by digit is
+  // indistinguishable from national digits ('3' then '7' reads as code '37'); pasting works.
+  if (!d) return '+375';
   let out = `+375 ${d.slice(0, 2)}`;
   if (d.length > 2) out += ` ${d.slice(2, 5)}`;
   if (d.length > 5) out += `-${d.slice(5, 7)}`;

@@ -391,6 +391,22 @@ export default function LeadForm() {
             {HOURS_NOTE}
           </Typography>
         </Box>
+        <Typography variant="bodyS" sx={{ color: colors.inkSoft, mt: 2, mb: 0 }}>
+          {'Новые заявки без имён и телефонов видно в нашем Telegram-канале: '}
+          <Link
+            href={CONTACT.telegramChannelUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            underline="always"
+            sx={{ color: colors.ink, '&:focus-visible': focusRing, borderRadius: '2px' }}
+          >
+            Открыть канал
+            <Box component="span" sx={hiddenSx}>
+              {' '}
+              (откроется в новой вкладке)
+            </Box>
+          </Link>
+        </Typography>
         <Button
           type="button"
           variant="outlined"
@@ -720,18 +736,6 @@ export default function LeadForm() {
               >
                 {`Позвонить: ${CONTACT.phoneDisplay}`}
               </Button>
-              <Typography variant="bodyS" sx={{ textAlign: 'center', m: 0 }}>
-                {'Или напишите нам в Telegram: '}
-                <Link
-                  href={CONTACT.telegramUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  underline="always"
-                  sx={{ color: colors.ink, '&:focus-visible': focusRing, borderRadius: '2px' }}
-                >
-                  {CONTACT.telegramHandle}
-                </Link>
-              </Typography>
             </>
           ) : null}
         </Box>

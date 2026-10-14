@@ -187,7 +187,14 @@ describe('LeadForm sending', () => {
     expect(screen.getByText(/Менеджер позвонит на \+375 29 123-45-67/)).toBeInTheDocument();
     expect(screen.getByText('Отправить ещё одну заявку')).toBeInTheDocument();
     expect(screen.getByText('Пн–Пт 08:00–20:00, Сб–Вс 10:00–18:00')).toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(/Telegram|бот/i);
+    expect(
+      screen.getByText('Новые заявки без имён и телефонов видно в нашем Telegram-канале:'),
+    ).toBeInTheDocument();
+    const channel = screen.getByRole('link', { name: /Открыть канал/ });
+    expect(channel).toHaveAttribute('href', 'https://t.me/+70XjCJljkqYwMGY6');
+    expect(channel).toHaveAttribute('target', '_blank');
+    expect(channel).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(channel).toHaveTextContent('Открыть канал (откроется в новой вкладке)');
     expect(screen.queryByRole('link', { name: /бота/ })).toBeNull();
   });
 
@@ -313,6 +320,18 @@ describe('LeadForm sending', () => {
     expect(screen.queryByText(/Или позвоните нам/)).toBeNull();
     expect(screen.getByText('Данные в форме сохранены.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Позвонить/ })).toHaveAttribute('href', 'tel:+375290000000');
+  });
+
+  it('offers no Telegram write-us link in the failure view (a channel cannot receive messages)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ ok: false, message: 'Сбой' }, 503)));
+    const user = userEvent.setup();
+    renderForm();
+    await fillValid(user);
+    await user.click(submitButton());
+    await screen.findByRole('button', { name: 'Повторить отправку' });
+    expect(screen.getByRole('link', { name: /Позвонить/ })).toBeInTheDocument();
+    expect(screen.queryByText(/напишите нам в Telegram/i)).toBeNull();
+    expect(screen.queryByRole('link', { name: /t\.me|Telegram|kvarta_roastery/ })).toBeNull();
   });
 
   it('treats a duplicate response as success', async () => {

@@ -7,6 +7,7 @@ import {
   formatMinskTime,
   sendTelegram,
   sendTelegramMessage,
+  siteLink,
 } from "@/lib/telegram";
 
 const TOKEN = "123456:SECRET-token_abc";
@@ -770,5 +771,37 @@ describe("sendTelegram targets", () => {
     );
     expect(err?.message).toBe("telegram send failed: TimeoutError");
     expect(clock).toBeLessThanOrEqual(4000);
+  });
+});
+
+describe("site link in notifications", () => {
+  it("siteLink is the https origin with a slash, and null for local dev", () => {
+    expect(siteLink("https://kvarta-coffee.netlify.app")).toBe("https://kvarta-coffee.netlify.app/");
+    expect(siteLink("http://localhost:3000")).toBeNull();
+  });
+
+  it("both messages end with the site link, the channel post still carries no personal data", () => {
+    const site = "https://kvarta-coffee.netlify.app/";
+    const priv = formatLeadMessage(lead(), site);
+    expect(priv.endsWith(`Сайт: ${site}`)).toBe(true);
+    expect(priv).toContain("· подписка");
+    expect(priv).toContain("Телефон:");
+    const pub = formatChannelMessage(lead(), site);
+    expect(pub.endsWith(`Сайт: ${site}`)).toBe(true);
+    expect(pub).not.toMatch(/Телефон|Имя|375/);
+  });
+
+  it("the link preview is requested only when a preview URL is given", async () => {
+    const fetchMock = vi.fn(async (..._args: unknown[]) => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "t");
+    await sendTelegramMessage("1", "x", { linkPreviewUrl: "https://kvarta-coffee.netlify.app/" });
+    await sendTelegramMessage("1", "x");
+    const bodies = fetchMock.mock.calls.map((c) => JSON.parse((c[1] as RequestInit).body as string));
+    expect(bodies[0].link_preview_options).toEqual({ url: "https://kvarta-coffee.netlify.app/", prefer_large_media: true });
+    expect(bodies[0].disable_web_page_preview).toBeUndefined();
+    expect(bodies[1].disable_web_page_preview).toBe(true);
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 });

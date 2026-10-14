@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/site";
 import type { StoredLead } from "@/lib/store";
 
 const MAX_MESSAGE_CHARS = 3800;
@@ -25,6 +26,11 @@ const ESCAPES: Record<string, string> = {
 export const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (ch) => ESCAPES[ch]);
 
+/** The public site link (with its Open Graph card), or null for the local-dev fallback. */
+export function siteLink(site: string = SITE_URL): string | null {
+  return /^https:\/\/[^/]+$/.test(site) ? `${site}/` : null;
+}
+
 const pad = (n: number): string => String(n).padStart(2, "0");
 
 /** "DD.MM.YYYY HH:MM" in Europe/Minsk (fixed UTC+3, no DST). */
@@ -45,7 +51,7 @@ function clip(raw: string, max: number): string {
   return max <= 0 ? "" : `${chars.slice(0, max - 1).join("")}…`;
 }
 
-function render(lead: StoredLead, commentMax: number, attrMax: number): string {
+function render(lead: StoredLead, commentMax: number, attrMax: number, site: string | null): string {
   const attr = (key: string): string =>
     clip(lead.attribution[key] ?? "", attrMax);
   const line = (label: string, raw: string): string | null =>
@@ -74,6 +80,7 @@ function render(lead: StoredLead, commentMax: number, attrMax: number): string {
     line("Страница входа", attr("landing")),
     line("Пришёл с", attr("referrer")),
     `Заявка получена: ${formatMinskTime(lead.createdAt)} · id ${escapeHtml(lead.leadId)}`,
+    site ? `Сайт: ${site}` : null,
   ];
   return lines.filter((l): l is string => l !== null).join("\n");
 }
@@ -89,27 +96,29 @@ function largest(hi: number, fits: (n: number) => boolean): number {
   return lo;
 }
 
-export function formatLeadMessage(lead: StoredLead): string {
+export function formatLeadMessage(lead: StoredLead, site: string | null = siteLink()): string {
   const commentLen = Array.from(lead.comment).length;
   const attrLen = Math.max(
     0,
     ...Object.values(lead.attribution).map((v) => Array.from(v).length),
   );
   const fits = (c: number, a: number): boolean =>
-    render(lead, c, a).length <= MAX_MESSAGE_CHARS;
+    render(lead, c, a, site).length <= MAX_MESSAGE_CHARS;
 
-  if (fits(commentLen, attrLen)) return render(lead, commentLen, attrLen);
+  if (fits(commentLen, attrLen)) return render(lead, commentLen, attrLen, site);
   // Shrink the comment first (raw code points, '…' appended), then the attribution values.
   if (fits(0, attrLen))
     return render(
       lead,
       largest(commentLen, (n) => fits(n, attrLen)),
       attrLen,
+      site,
     );
   return render(
     lead,
     0,
     largest(attrLen, (n) => fits(0, n)),
+    site,
   );
 }
 
@@ -158,6 +167,8 @@ async function failureOf(
 }
 
 type SendOptions = {
+  /** Show the link preview (Open Graph card) of this URL under the message. */
+  linkPreviewUrl?: string | null;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 };
@@ -181,7 +192,9 @@ export async function sendTelegramMessage(
     chat_id: chatId,
     text,
     parse_mode: "HTML",
-    disable_web_page_preview: true,
+    ...(opts.linkPreviewUrl
+      ? { link_preview_options: { url: opts.linkPreviewUrl, prefer_large_media: true } }
+      : { disable_web_page_preview: true }),
   });
 
   const deadline = now() + TOTAL_BUDGET_MS;
@@ -226,12 +239,12 @@ export async function sendTelegramMessage(
 }
 
 /** Public-feed post: the interest and the time only, never anything about the customer. */
-export function formatChannelMessage(lead: StoredLead): string {
+export function formatChannelMessage(lead: StoredLead, site: string | null = siteLink()): string {
   const label = INTEREST_LABELS[lead.interest] ?? "заявка";
   const time = Number.isNaN(new Date(lead.createdAt).getTime())
     ? "время неизвестно"
     : formatMinskTime(lead.createdAt);
-  return `<b>Новая заявка</b> · ${label}\nВремя: ${time} (Минск)`;
+  return `<b>Новая заявка</b> · ${label}\nВремя: ${time} (Минск)${site ? `\nСайт: ${site}` : ""}`;
 }
 
 let warnedNoPrivateChat = false;
@@ -283,7 +296,7 @@ export async function sendTelegram(
       "telegram: TELEGRAM_CHAT_ID not set: order details are not delivered to a private chat",
     );
   }
-  const opts = { sleep, now };
+  const opts = { sleep, now, linkPreviewUrl: siteLink() };
   const [priv, pub] = await Promise.allSettled([
     privateChat
       ? sendTelegramMessage(privateChat, formatLeadMessage(lead), opts)

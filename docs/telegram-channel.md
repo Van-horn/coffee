@@ -105,3 +105,7 @@ Delivery failures are logged without the token, chat ids or customer data (for e
 1. BotFather -> `/revoke` -> pick the bot; copy the new token.
 2. Update `TELEGRAM_BOT_TOKEN` in `.env` or `/etc/kvarta/env` and `.env.local`, then restart the service.
 3. The old token stops working immediately; orders submitted before the redeploy finishes are not posted (they are still saved), so rotate at a quiet time.
+
+## Site link and preview
+
+Every notification ends with `Сайт: <NEXT_PUBLIC_SITE_URL>/` (omitted for the local-dev fallback), and Telegram shows the site's Open Graph card (large image) under it. The manager chat message carries the type (подписка / разовый заказ / вопрос) and the form contacts; the public channel post carries the type and the time only, plus the link, never contacts.

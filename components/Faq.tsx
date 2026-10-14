@@ -26,7 +26,7 @@ const ITEMS = [
 
 export default function Faq() {
   return (
-    <Section id="faq" defer tone="paper" labelledBy="faq-title">
+    <Section id="faq" tone="paper" labelledBy="faq-title">
       <Box
         sx={{
           display: 'grid',

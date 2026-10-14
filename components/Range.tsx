@@ -192,7 +192,7 @@ function DripRow() {
 
 export default function Range() {
   return (
-    <Section id="range" defer tone="paper" labelledBy="range-title">
+    <Section id="range" tone="paper" labelledBy="range-title">
       <Box
         sx={{
           display: 'grid',

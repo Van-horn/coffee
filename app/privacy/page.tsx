@@ -52,7 +52,7 @@ const linkSx = {
 
 export default function PrivacyPage() {
   return (
-    <Box component="main" sx={{ bgcolor: colors.paper, color: colors.ink, minHeight: '100vh', py: { xs: 3, md: 5 } }}>
+    <Box component="main" id="main" tabIndex={-1} sx={{ bgcolor: colors.paper, color: colors.ink, minHeight: '100vh', py: { xs: 3, md: 5 } }}>
       <Box sx={{ maxWidth: 680, mx: 'auto', px: { xs: 2.5, sm: 5 } }}>
         <Logo />
         <Typography variant="h2" component="h1" sx={{ mt: { xs: 5, md: 7 }, mb: 4 }}>

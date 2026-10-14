@@ -15,7 +15,7 @@ function runChild(path: string, leadId: string, startAt: number) {
   return new Promise<{ leadId: string; result: string | null }>((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      ['--no-warnings', 'tests/helpers/claim-child.mts', path, leadId, String(startAt)],
+      ['--no-warnings', 'tests/helpers/claim-child.mjs', path, leadId, String(startAt)],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let out = '';

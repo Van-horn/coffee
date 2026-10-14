@@ -53,7 +53,10 @@ describe('handleLead', () => {
     const b = await handleLead(req(body({ idempotencyKey: 'key-0002' })), deps);
     expect(a.status).toBe(200);
     expect(b.status).toBe(200);
-    expect(b.body.leadId).toBe(a.body.leadId);
+    // Never discloses the first lead's id: the caller gets back its own key.
+    expect(a.body.leadId).toBe('key-0001');
+    expect(b.body.leadId).toBe('key-0002');
+    expect(JSON.stringify(b.body)).not.toContain('key-0001');
     expect(b.body.duplicate).toBe(true);
     expect(store.leads()).toHaveLength(1);
     expect(notify).toHaveBeenCalledTimes(1);

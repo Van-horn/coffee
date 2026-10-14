@@ -65,7 +65,7 @@ export async function handleLead(
     return unavailable;
   }
   if (existing !== null && existing !== lead.idempotencyKey) {
-    return { status: 200, body: { ok: true, leadId: existing, duplicate: true } };
+    return { status: 200, body: { ok: true, leadId: lead.idempotencyKey, duplicate: true } };
   }
 
   const stored: StoredLead = {

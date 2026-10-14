@@ -654,7 +654,7 @@ export default function LeadForm() {
               fieldRefs.current.comment = el;
             }}
             inputProps={inputProps('comment')}
-            sx={{ ...inputSx, height: 'auto', alignItems: 'flex-start', p: 0, '& textarea': { padding: '14px 16px' } }}
+            sx={{ ...inputSx, height: 'auto', alignItems: 'flex-start', p: 0, '& textarea': { padding: '14px 16px' }, '& textarea:not([aria-hidden])': { minHeight: 97, boxSizing: 'border-box' } }}
           />
         </Field>
 

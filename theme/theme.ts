@@ -76,7 +76,7 @@ const theme = createTheme({
     mode: 'light',
     background: { default: colors.paper, paper: colors.card },
     text: { primary: colors.ink, secondary: colors.inkSoft },
-    primary: { main: colors.roast, dark: colors.roastDeep, contrastText: colors.white },
+    primary: { main: colors.roastDeep, dark: colors.roastDeep, contrastText: colors.white },
     secondary: { main: colors.yolk, contrastText: colors.ink },
     error: { main: colors.error },
     success: { main: colors.leaf },

@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Not app code:
     ".cursor/**",
+    ".claude/**",
     ".superpowers/**",
   ]),
 ]);

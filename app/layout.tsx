@@ -5,7 +5,6 @@ import ThemeRegistry from '@/theme/registry';
 const roboto = Roboto({
   variable: '--font-roboto',
   subsets: ['cyrillic', 'latin'],
-  weight: ['400', '500'],
   style: ['normal', 'italic'],
   display: 'swap',
 });

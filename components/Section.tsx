@@ -54,7 +54,7 @@ export default function Section({ id, tone = 'paper', labelledBy, children, sx, 
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      <Box sx={[{ px: CONTAINER_PX }, fill && { flex: 1, display: 'flex', flexDirection: 'column' }]}>
+      <Box sx={[{ px: CONTAINER_PX }, fill ? { flex: 1, display: 'flex', flexDirection: 'column' } : {}]}>
         {children}
       </Box>
     </Box>

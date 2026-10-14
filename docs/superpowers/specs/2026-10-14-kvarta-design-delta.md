@@ -63,3 +63,10 @@ stats 5 кг / с 2019 / 1–3 дня, bag illustration; mobile/tablet stack the
 -> FAQ (extra) -> 06 заявка on ink background (left: headline "Оставьте заявку, мы перезвоним" (design says "мы напишем в Telegram", reworded per ruling 4), checklist,
    "что будет дальше" card; right: form card on card color, yolk submit button "Отправить заявку", consent line) -> Footer (extra).
 Read the exact Russian copy off the decoded PNGs; the copy fixes in ruling 9 apply.
+
+## Addendum: private Telegram channel (supersedes rulings 3 and 4)
+The concept changed after the first implementation. Rulings 3 and 4 above are superseded:
+- There is NO customer Telegram username field and no customer-facing bot, no webhook and no confirmation message to the customer.
+- Form fields are now: name, phone, interest radios, comment.
+- When a lead is accepted, the bot posts the order into a PRIVATE Telegram channel where only the bot can post (`TELEGRAM_CHAT_ID` is the channel id, for example `-1001234567890`). The channel is staff-only because posts contain the customer's name and phone. Setup: docs/telegram-channel.md.
+- Consent, order section and privacy copy say that name and phone go only to the manager (see components/LeadForm.tsx, components/OrderSection.tsx, app/privacy/page.tsx).

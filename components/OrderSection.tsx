@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import AccentHeading, { Accent } from '@/components/AccentHeading';
 import Eyebrow from '@/components/Eyebrow';
-import LeadForm from '@/components/LeadForm';
+import LazyLeadForm from '@/components/LazyLeadForm';
 import Section, { wide } from '@/components/Section';
 import CheckIcon from '@/components/icons/CheckIcon';
 import { colors, radius } from '@/theme/tokens';
@@ -102,7 +102,7 @@ export default function OrderSection() {
         </Box>
 
         <Box sx={{ minWidth: 0, width: '100%', maxWidth: { md: 680 }, justifySelf: { md: 'end' } }}>
-          <LeadForm />
+          <LazyLeadForm />
         </Box>
       </Box>
     </Section>

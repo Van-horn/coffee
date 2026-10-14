@@ -1,5 +1,7 @@
 # Kvarta Landing Page Implementation Plan
 
+> **Update 2026-10-14:** the Pixso layout supersedes this document where they differ (fonts, colors, form fields, delivery copy, no sticky CTA). See `docs/superpowers/specs/2026-10-14-kvarta-design-delta.md`; it wins.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship a Russian-language Kvarta roastery landing page with a working, deduplicating lead form, deployed on Vercel.

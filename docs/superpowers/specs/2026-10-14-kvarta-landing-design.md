@@ -1,5 +1,7 @@
 # Kvarta roastery landing page: design
 
+> **Update 2026-10-14:** the Pixso layout supersedes this document where they differ (fonts, colors, form fields, delivery copy, no sticky CTA). See `docs/superpowers/specs/2026-10-14-kvarta-design-delta.md`; it wins.
+
 Date: 2026-10-14. Deadline: Mon 19 Oct 2026, 18:00 Moscow time.
 
 ## Goal

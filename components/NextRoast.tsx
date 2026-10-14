@@ -3,21 +3,11 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useSyncExternalStore } from 'react';
-import { formatRuDate, formatRuDayMonth } from '@/lib/format';
-import { isOrderOpen, nextRoast } from '@/lib/schedule';
+import { nextRoastText } from '@/lib/roast-text';
 import { colors } from '@/theme/tokens';
-
-const WEEK_MS = 7 * 24 * 3_600_000;
 
 // Stable text for SSR and hydration (the page is prerendered, so "now" is read on the client only).
 const FALLBACK = 'по четвергам, заявки до среды, 20:00';
-
-export function nextRoastText(now: Date): string {
-  const roast = nextRoast(now);
-  if (isOrderOpen(now)) return `${formatRuDate(roast)} · заявки до среды, 20:00`;
-  const following = new Date(roast.getTime() + WEEK_MS);
-  return `${formatRuDate(roast)}, заявки закрыты · следующая ${formatRuDayMonth(following)}`;
-}
 
 const subscribe = () => () => {};
 const getServer = () => FALLBACK;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextRoastText } from '@/components/NextRoast';
+import { nextRoastText } from '@/lib/roast-text';
 
 describe('nextRoastText', () => {
   it('is open on Monday 12 Oct', () => {

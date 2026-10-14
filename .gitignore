@@ -20,3 +20,6 @@ next-env.d.ts
 # local lead database and backups
 /data/
 *.sqlite*
+
+# netlify local site link state
+.netlify/

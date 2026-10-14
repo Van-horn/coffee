@@ -1,0 +1,7 @@
+# Netlify deployment, see docs/netlify.md. The Next.js runtime (OpenNext adapter) is detected automatically.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"

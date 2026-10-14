@@ -6,11 +6,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFileStore } from '@/lib/file-store';
 import type { StoredLead } from '@/lib/store';
-// @ts-expect-error plain ESM scripts without type declarations
 import { backup } from '../scripts/backup-db.mjs';
-// @ts-expect-error plain ESM scripts without type declarations
 import { csvField, readLeads, toCsv } from '../scripts/export-leads.mjs';
-// @ts-expect-error plain ESM scripts without type declarations
 import { purgeLeads } from '../scripts/purge-leads.mjs';
 
 let dir: string;

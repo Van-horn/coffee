@@ -1,0 +1,27 @@
+services:
+  kvarta:
+    build:
+      context: .
+      args:
+        # Inlined into the bundle at build time; set it in .env before `docker compose build`.
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?set NEXT_PUBLIC_SITE_URL in .env}
+    image: kvarta:latest
+    env_file: .env
+    environment:
+      LEADS_DB_PATH: /data/leads.sqlite
+    ports:
+      - "127.0.0.1:3000:3000" # nginx on the host terminates TLS; never expose the app directly
+    volumes:
+      - kvarta-data:/data
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  kvarta-data:

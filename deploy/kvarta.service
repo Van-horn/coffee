@@ -1,0 +1,37 @@
+# /etc/systemd/system/kvarta.service
+# Layout assumed: the app is built in /opt/kvarta (see docs/deploy-server.md, path B), data in /var/lib/kvarta.
+[Unit]
+Description=Kvarta landing page (Next.js standalone)
+After=network.target
+
+[Service]
+Type=simple
+User=kvarta
+Group=kvarta
+WorkingDirectory=/opt/kvarta/.next/standalone
+EnvironmentFile=/etc/kvarta/env
+Environment=NODE_ENV=production
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3000
+Environment=LEADS_DB_PATH=/var/lib/kvarta/leads.sqlite
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+
+# Hardening: the process may write only to /var/lib/kvarta.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/kvarta
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -64,6 +64,33 @@ describe('selectStore', () => {
     await expect(store.hitRate('x')).rejects.toThrow(/cannot be opened/);
   });
 
+  it('refuses the file store on Netlify without the override: one error log, rejecting methods', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const path = join(dir, 'n.sqlite');
+    const store = selectStore({ NETLIFY: 'true', LEADS_DB_PATH: path });
+    await expect(store.hitRate('x')).rejects.toThrow(/Netlify/);
+    await expect(store.saveLead({} as never)).rejects.toThrow(/Netlify/);
+    expect(err).toHaveBeenCalledTimes(1);
+    expect(String(err.mock.calls[0][0])).toMatch(/ephemeral on Netlify/);
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it('treats AWS_LAMBDA_FUNCTION_NAME (the Netlify function runtime) like Netlify', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const store = selectStore({ AWS_LAMBDA_FUNCTION_NAME: 'fn', LEADS_DB_PATH: join(dir, 'l.sqlite') });
+    await expect(store.hitRate('x')).rejects.toThrow(/Netlify/);
+    expect(err).toHaveBeenCalledTimes(1);
+  });
+
+  it('ALLOW_EPHEMERAL_FILE_STORE=1 with an explicit LEADS_DB_PATH opens the file store on Netlify', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const path = join(dir, 'n.sqlite');
+    const store = file({ NETLIFY: 'true', ALLOW_EPHEMERAL_FILE_STORE: '1', LEADS_DB_PATH: path });
+    expect(await store.claimPhone('+375291234567', 'A', 600)).toBeNull();
+    expect(existsSync(path)).toBe(true);
+    expect(err).not.toHaveBeenCalled();
+  });
+
   it('rejection messages carry no personal data', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const store = selectStore({ VERCEL: '1' });

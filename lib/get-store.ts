@@ -31,11 +31,15 @@ type Selection = { store: LeadStore; retryAt: number | null };
 
 function select(env: Env, deps: Deps): Selection {
   const now = deps.now ?? Date.now;
-  if (env.VERCEL && env.ALLOW_EPHEMERAL_FILE_STORE !== '1') {
+  const platform = env.VERCEL ? 'Vercel' : env.NETLIFY || env.AWS_LAMBDA_FUNCTION_NAME ? 'Netlify' : null;
+  if (platform && env.ALLOW_EPHEMERAL_FILE_STORE !== '1') {
     console.error(
-      'lead store: the filesystem is ephemeral on Vercel: orders would be lost; deploy to a server with a persistent disk',
+      `lead store: the filesystem is ephemeral on ${platform}: orders would be lost; deploy to a server with a persistent disk`,
     );
-    return { store: failingStore('Lead storage is unavailable on Vercel (ephemeral filesystem)'), retryAt: null };
+    return {
+      store: failingStore(`Lead storage is unavailable on ${platform} (ephemeral filesystem)`),
+      retryAt: null,
+    };
   }
   try {
     return { store: (deps.open ?? defaultOpen)(databasePath(env)), retryAt: null };
